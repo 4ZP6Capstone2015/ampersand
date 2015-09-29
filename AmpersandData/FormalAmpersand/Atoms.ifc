@@ -2,51 +2,23 @@
 INCLUDE "Atoms.adl"
 INCLUDE "Atoms.xlsx"
 
-sLRepr :: SESSION * Representation -- editing relation
-ROLE ExecEngine MAINTAINS "Create new left atom"
-RULE "Create new left atom": sRel~;'_SESSION';sLRepr |- source;pop~;repr
-VIOLATION ({EX} TXT "NewStruct;Atom"
-                  ,TXT ";pop;Atom;_New;Concept;", SRC source
-                  ,TXT ";repr;Atom;_NEW;Representation;", TGT I
-          )
-
-sRRepr :: SESSION * Representation -- editing relation
-ROLE ExecEngine MAINTAINS "Create new right atom"
-RULE "Create new right atom": sRel~;'_SESSION';sRRepr |- target;pop~;repr
-VIOLATION ({EX} TXT "NewStruct;Atom"
-                  ,TXT ";pop;Atom;_New;Concept;", SRC target
-                  ,TXT ";repr;Atom;_NEW;Representation;", TGT I
-          )
-
-sRel   :: SESSION * Relation -- editing relation
-ROLE ExecEngine MAINTAINS "Create new pair"
-RULE "Create new pair": '_SESSION' /\ sLRepr;sLRepr~ /\ sRRepr;sRRepr~ /\ sRel;sRel~ |- -V
-VIOLATION ({EX} TXT "NewStruct;Pair"
-                  ,TXT ";in;Pair;_NEW;Relation;", SRC sRel
-                  ,TXT ";l;Pair;_NEW;Atom;", SRC (sLRepr;repr~ /\ sRel;pop~)
-                  ,TXT ";r;Pair;_NEW;Atom;", SRC (sRRepr;repr~ /\ sRel;pop~)
--- now, clean up so that we can add another pair.
-          ,{EX} TXT "DelPair;sLRepr;SESSION;", SRC I, TXT ";Representation;" SRC sLRepr
-          ,{EX} TXT "DelPair;sRRepr;SESSION;", SRC I, TXT ";Representation;" SRC sRRepr
-          ,{EX} TXT "DelPair;sRel;SESSION;", SRC I, TXT ";Representation;" SRC sRel
-          )
-
-INTERFACE Overview : (sLRepr, sRRepr, sRel) '_SESSION'[SESSION]
-TABS[ atoms : V[SESSION*Atom]
+INTERFACE Overview : '_SESSION'[SESSION]
+TABS[ relations : V[SESSION*Relation]
       BOX<SCOLS>
-           [ repr : I
-           , type : pop - pop;isaStar
-           , pop  : pop
+           [ relation   : I[Relation]
+           , "pair(s)"  : in~
+           , sources    : sources
+           , targets    : targets
            ]
     , concepts :V[SESSION*Concept]
       BOX<SCOLS>
            [ name    : I[Concept]
            , "isa"   : isa
-           , "isa+"  : isaPlus
-           , "isa*"  : isaStar
+--           , "isa+"  : isaPlus
+--           , "isa*"  : isaStar
            , "isa~"  : isa~
-           , "isa+~" : isaPlus~
-           , "isa*~" : isaStar~
+--           , "isa+~" : isaPlus~
+--           , "isa*~" : isaStar~
            , atoms   : pop~
            ]
     , pairs : V[SESSION*Pair]
@@ -54,31 +26,19 @@ TABS[ atoms : V[SESSION*Atom]
            [ pair          : I
            , "relation(s)" : in
            ]
-    , "new pair" : I
-      BOX[ "l;repr" : sLRepr -- representation of source atom
-         , "r;repr" : sRRepr -- representation of target atom
-         , "in" : sRel -- relation in which the pair is to be populated.
-         ]
-    , relations : V[SESSION*Relation]
+    , atoms : V[SESSION*Atom]
       BOX<SCOLS>
-           [ relation   : I[Relation]
-           , "pair(s)"  : in~
-           , sources    : sources
-           , targets    : targets
-           ]
-    , garbage : V[SESSION*Atom];(I - pop;pop~)
-      COLS [ repr : repr
+           [ atom : I
+           , type : pop - pop;isaPlus
+           , pop  : pop
            ]
     ]
 
-VIEW Atom : Atom(repr)  -- When observing an atom, its representation is what you can see.
-
-INTERFACE Atom(repr) : I[Atom]
-ROWS [ repr : repr
-     , pop  : pop
-     ]
-
+--VIEW Atom : Atom(repr)  -- When observing an atom, its representation is what you can see.
+REPRESENT Atom TYPE ALPHANUMERIC
 VIEW Concept : Concept(name)
+VIEW Pair : Pair(TXT "(",l,TXT ",",r,TXT ")")
+VIEW Relation : Relation(name,TXT "[",source;name,TXT "*",target;name,TXT "]")
 
 INTERFACE Concept(name[Concept*Identifier],isa) : I[Concept]
 ROWS [ name             : name
@@ -86,16 +46,11 @@ ROWS [ name             : name
      , specializations  : isa~
      ]
 
-VIEW Pair : Pair(TXT "(",l;repr,TXT ",",r;repr,TXT ")")
-
 INTERFACE Pair(l,r,in[Pair*Relation]) : I[Pair]
-ROWS [ pair           : I
+ROWS [ "relation(s)"  : in
      , l              : l
      , r              : r
-     , "relation(s)"  : in
      ]
-
---VIEW Relation : Relation(name,TXT "[",source;name,TXT "*",target;name,TXT "]")
 
 INTERFACE Relation(name[Relation*Identifier],source,target) : I[Relation]
 ROWS [ name    : name
