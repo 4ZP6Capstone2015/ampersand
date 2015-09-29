@@ -30,33 +30,45 @@ executable ampersand
   default-language:  Haskell2010
   ghc-options:       -rtsopts -Wall
   build-depends:     
-                     HStringTemplate == 0.7.*,
-                     SpreadsheetML == 0.1.*,
-                     base >= 4.7 && < 5.0,
-                     bytestring == 0.10.*,
-                     containers == 0.5.*,
-                     csv == 0.1.*,
-                     directory == 1.2.*,
-                     filepath == 1.3.*,
-                     graphviz == 2999.17.*,
-                     hashable == 1.2.*,
-                     mtl == 2.1.*,
-                     old-locale == 1.0.*,
-                     old-time == 1.1.*,
-                     pandoc == 1.13.*,
-                     pandoc-types == 1.12.*,
-                     parsec == 3.1.*,
-                     process == 1.2.*,
-                     simple-sql-parser >=0.4.1 && <0.5,
-                     split == 0.2.*,
-                     time == 1.4.*,
-                     utf8-string == 0.3.*,
-                     text >=1.1 && <1.3,
-                     xlsx == 0.1.*,
-                     zlib,
-                     lens,
-                     MissingH,
-                     wl-pprint
+    SpreadsheetML == 0.1.*,
+    base >= 4.7 && < 5.0,
+    bytestring == 0.10.*,
+    containers == 0.5.*,
+    csv == 0.1.*,
+    graphviz == 2999.17.*,
+    hashable == 1.2.*,
+    old-locale == 1.0.*,
+    old-time == 1.1.*,
+    pandoc == 1.13.*,
+    pandoc-types == 1.12.*,
+    parsec == 3.1.*,
+    process == 1.2.*,
+    simple-sql-parser >=0.4.1 && <0.5,
+    split == 0.2.*,
+    utf8-string == 0.3.*,
+    text >=1.1 && <1.3,
+    xlsx == 0.1.*,
+    zlib,
+    lens,
+    MissingH,
+    wl-pprint
+
+  if impl(ghc <= 7.8.4)  
+    build-depends: 
+      time == 1.4.*, 
+      HStringTemplate == 0.7.*,
+      mtl == 2.1.*,
+      directory == 1.2.*,
+      filepath == 1.3.*
+  else 
+  -- 7.10 or later
+    build-depends: 
+      time >= 1.4, 
+      HStringTemplate >= 0.7.0,
+      mtl >= 2.1.0,
+      directory >= 1.2.0.0,
+      filepath >= 1.3.0
+    
   other-modules:     
                      Database.Design.Ampersand,
                      Database.Design.Ampersand.ADL1,
