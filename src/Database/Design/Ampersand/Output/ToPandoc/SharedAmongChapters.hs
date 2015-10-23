@@ -81,7 +81,7 @@ chaptersInDoc opts = [chp | chp<-chapters, chp `notElem` disabled]
    -- temporarily switch off chapters that need too much refactoring, but keep this Haskell code compilable.
     disabled = []
     chapters
-     | test opts                  = [SharedLang,Diagnosis]
+     | test opts                  = [SharedLang]
      | diagnosisOnly opts         = [Diagnosis]
      | theme opts == StudentTheme = [Intro,SharedLang,Diagnosis,ConceptualAnalysis,DataAnalysis]
      | otherwise                   = [ Intro
@@ -306,7 +306,8 @@ orderingByTheme fSpec
         )
      where
        (thmRuls,restRuls) = partition (inThisTheme ptrls) ruls
-       (themeDcls,restDcls) = partition (inThisTheme relsMentionedIn) rels
+       (themeDcls,restDcls) = partition (inThisTheme relsInTheme) rels
+          where relsInTheme p = relsDefdIn p `uni` relsMentionedIn p
        (themeCpts,restCpts) = partition (inThisTheme concs) cpts
        inThisTheme :: Eq a => (Pattern -> [a]) -> a -> Bool
        inThisTheme allElemsOf x

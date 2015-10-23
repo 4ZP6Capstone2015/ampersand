@@ -40,6 +40,7 @@ makeFSpec opts context
               , vplugInfos   = definedplugs
               , plugInfos    = allplugs
               , interfaceS   = fSpecAllInterfaces -- interfaces specified in the Ampersand script
+              , roleInterfaces = fSpecRoleInterfaces
               , interfaceG   = [ifc | ifc<-interfaceGen, let ctxrel = objctx (ifcObj ifc)
                                     , isIdent ctxrel && source ctxrel==ONE
                                       || ctxrel `notElem` map (objctx.ifcObj) fSpecAllInterfaces
@@ -110,14 +111,28 @@ makeFSpec opts context
               , contextInfo = contextinfo
               , specializationsOf = smallerConcepts (gens context)
               , generalizationsOf = largerConcepts  (gens context)
+              , editableConcepts = nub . concatMap editablecpts . fSpecRoleInterfaces
               }
    where           
+     editablecpts :: Interface -> [A_Concept]
+     editablecpts ifc = editables (ifcObj ifc)
+        where
+          editables :: ObjectDef -> [A_Concept]
+          editables obj = 
+             case objmsub obj of
+               Nothing       -> case objctx obj of
+                                  EDcD rel -> f target rel
+                                  EFlp (EDcD rel) -> f source rel
+                                  _ -> []
+               Just (InterfaceRef _ _) -> []
+               Just (Box _ _ objs)     -> foldr (uni) [] (map editables objs)
+          f sORt dcl = [sORt dcl | dcl `elem` ifcParams ifc]
      pairsinexpr  :: Expression -> [AAtomPair]
      pairsinexpr = fullContents contextinfo initialpopsDefinedInScript
      ruleviolations :: Rule -> [AAtomPair]
      ruleviolations r = case rrexp r of
           EEqu{} -> (cra >- crc) ++ (crc >- cra)
-          EImp{} -> cra >- crc
+          EInc{} -> cra >- crc
           _      -> pairsinexpr (EDcV (sign (consequent r))) >- crc  --everything not in con
           where cra = pairsinexpr (antecedent r)
                 crc = pairsinexpr (consequent r)
@@ -139,6 +154,12 @@ makeFSpec opts context
            = ifc{ ifcEcas = fst . assembleECAs opts context $ ifcParams ifc
                 , ifcControls = makeIfcControls (ifcParams ifc) allConjs
                 }
+     fSpecRoleInterfaces :: Role -> [Interface]
+     fSpecRoleInterfaces role = filter (forThisRole role) fSpecAllInterfaces
+     forThisRole ::Role -> Interface -> Bool
+     forThisRole role interf = case ifcRoles interf of
+                                     []   -> True -- interface is for all roles
+                                     rs  -> role `elem` rs
      
      themesInScope = if null (ctxthms context)   -- The names of patterns/processes to be printed in the functional specification. (for making partial documentation)
                      then map name (patterns context)
@@ -329,17 +350,20 @@ makeFSpec opts context
              , ifcObj    = Obj { objnm   = name cpt ++ " (instantie)"
                                , objpos  = Origin "generated object for interface for each concept in TblSQL or ScalarSQL"
                                , objctx  = EDcI cpt
+                               , objcrud = def
                                , objmView = Nothing
                                , objmsub = Just . Box cpt Nothing $
                                             Obj { objnm   = "I["++name cpt++"]"
                                                 , objpos  = Origin "generated object: step 4a - default theme"
                                                 , objctx  = EDcI cpt
+                                                , objcrud = def
                                                 , objmView = Nothing
                                                 , objmsub = Nothing
                                                 , objstrs = [] }
                                            :[Obj { objnm   = name dcl ++ "::"++name (source dcl)++"*"++name (target dcl)
                                                  , objpos  = Origin "generated object: step 4a - default theme"
                                                  , objctx  = if source dcl==cpt then EDcD dcl else flp (EDcD dcl)
+                                                 , objcrud = def
                                                  , objmView = Nothing
                                                  , objmsub = Nothing
                                                  , objstrs = [] }
@@ -364,6 +388,7 @@ makeFSpec opts context
              = [ Obj { objnm   = showADL t
                      , objpos  = Origin "generated recur object: step 4a - default theme"
                      , objctx  = t
+                     , objcrud = def
                      , objmView = Nothing
                      , objmsub = Just . Box (target t) Nothing $ recur [ pth | (_:pth)<-cl, not (null pth) ]
                      , objstrs = [] }
@@ -383,6 +408,7 @@ makeFSpec opts context
              , ifcObj      = Obj { objnm   = name c
                                  , objpos  = Origin "generated object: step 4a - default theme"
                                  , objctx  = EDcI c
+                                 , objcrud = def
                                  , objmView = Nothing
                                  , objmsub = Just . Box c Nothing $ objattributes
                                  , objstrs = [] }
@@ -411,6 +437,7 @@ makeFSpec opts context
              , ifcObj      = Obj { objnm   = nm
                                  , objpos  = Origin "generated object: step 4b"
                                  , objctx  = EDcI ONE
+                                 , objcrud = def
                                  , objmView = Nothing
                                  , objmsub = Just . Box ONE Nothing $ [att]
                                  , objstrs = [] }
@@ -430,7 +457,7 @@ makeFSpec opts context
                 | theme opts == StudentTheme = name c
                 | null nms = fatal 355 "impossible"
                 | otherwise = head nms
-              att = Obj (name c) (Origin "generated attribute object: step 4b") (EDcV (Sign ONE c)) Nothing Nothing []
+              att = Obj (name c) (Origin "generated attribute object: step 4b") (EDcV (Sign ONE c)) def Nothing Nothing []
         ]
      ----------------------
      --END: making interfaces

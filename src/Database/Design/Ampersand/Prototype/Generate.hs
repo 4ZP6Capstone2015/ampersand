@@ -148,6 +148,8 @@ generateDBstructQueries fSpec =
                                  )
                             )
                         )
+                     ++ [" , "++show "ts_insert"++" TIMESTAMP DEFAULT CURRENT_TIMESTAMP"]
+                     ++ [" , "++show "ts_update"++" TIMESTAMP ON UPDATE CURRENT_TIMESTAMP NULL"]
                      ++ [" ) ENGINE=InnoDB DEFAULT CHARACTER SET UTF8 COLLATE UTF8_BIN"]
                    )
           ]
@@ -470,7 +472,8 @@ generateRoles fSpec =
                  [ [ "array ( 'id' => "++show i 
                    , "      , 'name' => "++showPhpStr (name role)
                    , "      , 'ruleNames'  => array ("++ intercalate ", " ((map (showPhpStr . name . snd) . filter (maintainedByRole role) . fRoleRuls) fSpec) ++")"
-                   , "      , 'interfaces' => array ("++ intercalate ", " ((map (showPhpStr . name) . filter (forThisRole role) . interfaceS) fSpec) ++")"
+                   , "      , 'interfaces' => array ("++ intercalate ", " (map (showPhpStr . name) ((roleInterfaces fSpec) role)) ++")"
+                   , "      , 'editableConcepts' => array ("++ intercalate ", " (map (showPhpStr . name) ((editableConcepts fSpec) role)) ++")"
                    , "      )" ]
                  | (i,role) <- zip [1::Int ..] (filter serviceOrRole $ fRoles fSpec) ]
             ) )
@@ -478,9 +481,6 @@ generateRoles fSpec =
              serviceOrRole Role{} = not isService
              serviceOrRole Service{} = isService 
         maintainedByRole role (role',_) = role == role'
-        forThisRole role interf = case ifcRoles interf of
-                                     []   -> True -- interface is for all roles
-                                     rs  -> role `elem` rs
 
 generateViews :: FSpec -> [String]
 generateViews fSpec =
@@ -579,8 +579,12 @@ genInterfaceObjects fSpec editableRels mTopLevelFields depth object =
              [ "      , 'relation' => '' // this interface expression does not represent a declared relation"
              , "      , 'relationIsFlipped' => ''"
              ] 
-  ++ [ "      , 'srcConcept' => "++showPhpStr (name srcConcept) -- NOTE: these are src and tgt of the expression, not necessarily the relation (if there is one), 
-     , "      , 'tgtConcept' => "++showPhpStr (name tgtConcept) -- which may be flipped.
+  ++ [ "      , 'srcConcept'    => "++showPhpStr (name srcConcept) -- NOTE: these are src and tgt of the expression, not necessarily the relation (if there is one), 
+     , "      , 'tgtConcept'    => "++showPhpStr (name tgtConcept) -- which may be flipped.
+     , "      , 'crudC'         => "++ (showPhpMaybeBool . crudC . objcrud $ object)
+     , "      , 'crudR'         => "++ (showPhpMaybeBool . crudR . objcrud $ object)
+     , "      , 'crudU'         => "++ (showPhpMaybeBool . crudU . objcrud $ object)
+     , "      , 'crudD'         => "++ (showPhpMaybeBool . crudD . objcrud $ object)
      , "      , 'exprIsUni'     => " ++ showPhpBool (isUni normalizedInterfaceExp) -- We could encode these by creating min/max also for non-editable,
      , "      , 'exprIsTot'     => " ++ showPhpBool (isTot normalizedInterfaceExp) -- but this is more in line with the new front-end templates.
      , "      , 'exprIsProp'    => " ++ showPhpBool (isProp normalizedInterfaceExp) 

@@ -67,6 +67,12 @@ class Viewer {
 			// angular-file-upload
 			$this->addHtmlLine('<script src="app/lib/angular/angular-file-upload/angular-file-upload.min.js"></script>');
 			
+			// angular-grid
+			$this->addHtmlLine('<script src="app/lib/angular/angular-grid/ag-grid.min.js"></script>');
+			$this->addHtmlLine('<link href="app/lib/angular/angular-grid/ag-grid.min.css" rel="stylesheet" media="screen" type="text/css">');
+			$this->addHtmlLine('<link href="app/lib/angular/angular-grid/theme-dark.min.css" rel="stylesheet" media="screen" type="text/css">');
+			$this->addHtmlLine('<link href="app/lib/angular/angular-grid/theme-fresh.min.css" rel="stylesheet" media="screen" type="text/css">');
+			
 		// Restangular (with depency for lodash)
 		$this->addHtmlLine('<script src="app/lib/restangular/restangular.min.js"></script>');
 		$this->addHtmlLine('<script src="app/lib/restangular/lodash.min.js"></script>');
@@ -76,14 +82,22 @@ class Viewer {
 
 		$this->addHtmlLine('<script src="app/lib/json-patch/json-patch-duplex.min.js"></script>');
 		
-		// CSS files
-		$files = getDirectoryList(__DIR__ . '/../app/css');
-		foreach ((array)$files as $file){ 
-			if (substr($file,-3) !== 'css') continue;
-			$this->addHtmlLine('<link href="app/css/'.$file.'" rel="stylesheet" media="screen" type="text/css">');
-		}
-		foreach ((array)$GLOBALS['hooks']['after_Viewer_load_cssFiles'] as $cssFile) $this->addHtmlLine('<link href="'.$cssFile.'" rel="stylesheet" media="screen" type="text/css">');
+		/********* CSS ********************/
+			// CSS files from app directory
+			$files = getDirectoryList(__DIR__ . '/../app/css');
+			$cssFiles = array();
+			foreach ((array)$files as $file){ 
+				if (substr($file,-3) !== 'css') continue;
+				if ($file == 'ampersand.css') array_unshift($cssFiles, 'app/css/' . $file); // make sure ampersand.css is listed first 
+				else $cssFiles[] = 'app/css/' . $file;
+			}
+			// CSS files from extensions
+			foreach ((array)$GLOBALS['hooks']['after_Viewer_load_cssFiles'] as $file) $cssFiles[] = $file;
+			
+			// Add css files to html output
+			foreach ($cssFiles as $file) $this->addHtmlLine('<link href="'.$file.'" rel="stylesheet" media="screen" type="text/css">');
 		
+		/********** App specific javascript ****************/
 		// AmpersandApp
 		$this->addHtmlLine('<script src="app/AmpersandApp.js"></script>');
 		$this->addHtmlLine('<script src="generics/app/RouteProvider.js"></script>');

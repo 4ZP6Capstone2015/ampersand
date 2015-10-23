@@ -47,7 +47,7 @@ defaultWriterVariables :: FSpec -> [(String , String)]
 defaultWriterVariables fSpec
   = [ ("title", (case (fsLang fSpec, diagnosisOnly (getOpts fSpec)) of
                         (Dutch  , False) -> if test (getOpts fSpec)
-                                            then "Taalmodel van "
+                                            then "Afspraken van "
                                             else "Functionele Specificatie van "
                         (English, False) -> "Functional Specification of "
                         (Dutch  ,  True) -> "Diagnose van "
@@ -109,7 +109,7 @@ defaultWriterVariables fSpec
          , "% End-hack1"
          , ""
 
-         , "% hack2) The LaTeX commands \\[ and \\], are redefined in the amsmath package, making sure that ecuations are"
+         , "% hack2) The LaTeX commands \\[ and \\], are redefined in the amsmath package, making sure that equations are"
          , "% not numbered. This is undesireable behaviour. this is fixed with the following hack, inspired on a note"
          , "% found at http://tex.stackexchange.com/questions/40492/what-are-the-differences-between-align-equation-and-displaymath"
          , "\\DeclareRobustCommand{\\[}{\\begin{equation}}"
@@ -148,7 +148,7 @@ defaultWriterVariables fSpec
 --DESCR -> functions to write the pandoc
 --         String = the name of the outputfile
 --         The first IO() is a Pandoc output format
---         The second IO(): If the output format is latex, then this IO() generates a .pdf from the .tex
+--         The second IO(): If the output format is latex, then this IO() generates a .pdf from the .ltx
 writepandoc :: FSpec -> Pandoc -> (String,IO(),IO())
 writepandoc fSpec thePandoc = (outputFile,makeOutput,postProcessMonad)
          where
@@ -165,7 +165,7 @@ writepandoc fSpec thePandoc = (outputFile,makeOutput,postProcessMonad)
                                                  Frst          -> ".rst"
                                                  FPandoc       -> ".pandoc"
                                                  Frtf          -> ".rtf"
-                                                 FLatex        -> ".tex"
+                                                 FLatex        -> ".ltx"
                                                  Fhtml         -> ".html"
                                                  Fopendocument -> ".odt"
                                                  Ftexinfo      -> ".texinfo"
@@ -283,7 +283,7 @@ writepandoc fSpec thePandoc = (outputFile,makeOutput,postProcessMonad)
                                           --  when notReady (dump "log")  -- Need to dump the last log file, otherwise pdfLatex cannot write its log.
                                             doRestOfPdfLatex (not notReady, roundsSoFar +1)
 
-                                texFilename = addExtension (baseName (getOpts fSpec)) ".tex"
+                                texFilename = addExtension (baseName (getOpts fSpec)) ".ltx"
 
                                 callPdfLatexOnce :: IO ExitCode
                                 callPdfLatexOnce =
@@ -444,7 +444,7 @@ instance ShowMath Signature where
 instance ShowMath Expression where
  showMath = showExpr . insParentheses
    where  showExpr (EEqu (l,r)) = showExpr l++texOnly_equals++showExpr r
-          showExpr (EImp (l,r)) = showExpr l++texOnly_subs++showExpr r
+          showExpr (EInc (l,r)) = showExpr l++texOnly_subs++showExpr r
           showExpr (EIsc (l,r)) = showExpr l++texOnly_inter++showExpr r
           showExpr (EUni (l,r)) = showExpr l++texOnly_union++showExpr r
           showExpr (EDif (l,r)) = showExpr l++texOnly_bx ++showExpr r
