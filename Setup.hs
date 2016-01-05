@@ -11,11 +11,11 @@ import Data.Either
 import Data.Char
 import Data.Time.Clock
 import qualified Data.Time.Format as DTF
+import qualified Data.Time.Format as SL
 import Data.Time.LocalTime
 import System.Directory
 import System.FilePath
 import System.IO
-import qualified System.Locale as SL
 import qualified Data.ByteString.Lazy.Char8 as BS
 import qualified Codec.Compression.GZip as GZip
 
