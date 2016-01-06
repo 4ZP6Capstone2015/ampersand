@@ -24,9 +24,14 @@ main =
               Errors err    -> do putStrLn "Error(s) found:"
                                   mapM_ putStrLn (intersperse  (replicate 30 '=') (map showErr err))
                                   exitWith $ ExitFailure 10
-              Checked fSpec -> do when printName $ putStrLn $ "The name of the specification is " ++ fsName fSpec 
+              Checked fSpec -> do when printName $ printInfoFSpec fSpec 
                                   generateAmpersandOutput fSpec
                                   generateProtoStuff      fSpec
+
+printInfoFSpec :: FSpec -> IO ()  
+printInfoFSPec fSpec = do
+  putStrLn $ "The name of the specification is " ++ fsName fSpec 
+  
 
 generateProtoStuff :: FSpec -> IO ()
 generateProtoStuff fSpec
