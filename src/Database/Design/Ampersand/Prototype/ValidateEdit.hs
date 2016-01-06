@@ -10,10 +10,7 @@ import Database.Design.Ampersand.Basics
 import Database.Design.Ampersand.Prototype.PHP
 import Database.Design.Ampersand.FSpec.SQL
 import qualified Database.Design.Ampersand.Misc.Options as Opts
-
-fatal :: Int -> String -> a
-fatal = fatalMsg "Prototype.ValidateEdit"
-
+import Database.Design.Ampersand.Classes.ConceptStructure
 
 tempDbName :: String
 tempDbName = "ampersand_temporaryeditvalidationdb"
@@ -36,7 +33,7 @@ validateEditScript fSpec beforePops afterPops editScriptPath =
             
             ; let expectedConceptTables  = [ (c,map showValSQL atoms) | ACptPopu c atoms <- afterPops ]
             ; let expectedRelationTables = [ (d,map showValsSQL pairs) | ARelPopu{popdcl=d,popps=pairs} <- afterPops ]
-            ; let actualConcepts = [ c | c<- allConcepts fSpec, c /= ONE, name c /= "SESSION" ] -- TODO: are these the right concepts and decls?
+            ; let actualConcepts = [ c | c<- concs fSpec, c /= ONE, name c /= "SESSION" ] -- TODO: are these the right concepts and decls?
             ; let actualRelations = allDecls fSpec            --
             ; actualConceptTables <- mapM (getSqlConceptTable fSpec) actualConcepts
             ; actualRelationTables <- mapM (getSqlRelationTable fSpec) actualRelations
@@ -99,9 +96,9 @@ getSqlConceptTable fSpec c =
  do { -- to prevent needing a unary query function, we add a dummy NULL column and use `src` and `tgt` as column names (in line with what performQuery expects)
       let query = case lookupCpt fSpec c of
                     []                      -> fatal 58  "No concept table for concept \"" ++ name c ++ "\""
-                    (table,conceptField):_ -> "SELECT DISTINCT `" ++ fldname conceptField ++ "` as `src`, NULL as `tgt`"++
-                                              " FROM `" ++ name table ++ "`" ++
-                                              " WHERE `" ++ fldname conceptField ++ "` IS NOT NULL"
+                    (table,conceptAttribute):_ -> "SELECT DISTINCT `" ++ attName conceptAttribute ++ "` as `src`, NULL as `tgt`"++
+                                                  " FROM `" ++ name table ++ "`" ++
+                                                  " WHERE `" ++ attName conceptAttribute ++ "` IS NOT NULL"
     --; putStrLn $ "Query for concept " ++ name c ++ ":" ++ query 
     ; atomsDummies <- performQuery (getOpts fSpec) tempDbName query
     ; return (c, map fst atomsDummies)

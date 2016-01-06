@@ -5,7 +5,6 @@ where
 import Database.Design.Ampersand.FSpec
 import Database.Design.Ampersand.Basics
 import Database.Design.Ampersand.Core.AbstractSyntaxTree
-import System.Time
 import qualified Data.Map as M
 import Codec.Xlsx
 import qualified Data.ByteString.Lazy as L
@@ -13,11 +12,9 @@ import qualified Data.Text as T
 import Data.Maybe
 import Data.List
 import Data.Time.Calendar
+import Data.Time.Clock.POSIX
 
-fatal :: Int -> String -> a
-fatal = fatalMsg "Population2Xlsx"
-
-fSpec2PopulationXlsx :: ClockTime -> FSpec -> L.ByteString 
+fSpec2PopulationXlsx :: POSIXTime -> FSpec -> L.ByteString 
 fSpec2PopulationXlsx ct fSpec = 
   fromXlsx ct xlsx
     where
@@ -42,7 +39,7 @@ plugs2Sheets fSpec = M.fromList . catMaybes . Prelude.map plug2sheet $ plugInfos
        matrix :: Maybe  [[Cell]]
        matrix = 
          case plug of
-           TblSQL{} -> if length (fields plug) > 1
+           TblSQL{} -> if length (attributes plug) > 1
                        then Just $ headers ++ content
                        else Nothing
            BinSQL{} -> -- trace ("## Warning: Handling of link-tables isn't correct yet. Therefor, sheet`"++name plug++"` doesn't contain proper info") $
@@ -50,18 +47,18 @@ plugs2Sheets fSpec = M.fromList . catMaybes . Prelude.map plug2sheet $ plugInfos
            ScalarSQL{} -> Nothing
          where
            headers :: [[Cell]]
-           headers = transpose (Prelude.map f (zip (True : repeat False) (plugFields plug))) 
-             where f :: (Bool,SqlField) -> [Cell]
-                   f (isFirstField,fld) = Prelude.map toCell 
+           headers = transpose (Prelude.map f (zip (True : repeat False) (plugAttributes plug))) 
+             where f :: (Bool,SqlAttribute) -> [Cell]
+                   f (isFirstField,att) = Prelude.map toCell 
                          [ if isFirstField  -- In case of the first field of the table, we put the fieldname inbetween brackets,
                                             -- to be able to find the population again by the reader of the .xlsx file
-                           then Just $ "["++name fld++"]" 
+                           then Just $ "["++name att++"]" 
                            else Just . cleanUpRelName $
                                           case plug of
-                                            TblSQL{}    -> name fld
+                                            TblSQL{}    -> name att
                                             BinSQL{}    -> name plug
                                             ScalarSQL{} -> fatal 57 "ScalarSQL not expected here"
-                         , Just $ name .target . fldexpr $ fld ]
+                         , Just $ name .target . attExpr $ att ]
                    cleanUpRelName :: String -> String
                    --TODO: This is a not-so-nice way to get the relationname from the fieldname.
                    cleanUpRelName orig
@@ -81,7 +78,7 @@ plugs2Sheets fSpec = M.fromList . catMaybes . Prelude.map plug2sheet $ plugInfos
                                                   AAVFloat _ x -> CellDouble x
                                                   AAVBoolean _ b -> CellBool b
                                                   AAVDate _ day -> (CellDouble . fromInteger) (diffDays (fromGregorian 1900 1 1) day)
-                                                  _ -> fatal 87 $ "Content found that cannot be converted to Excel (jet)." 
+                                                  _ -> fatal 87 ( "Content found that cannot be converted to Excel (yet): "++show aVal) 
                                            )  
        toCell :: Maybe String -> Cell
        toCell mVal 

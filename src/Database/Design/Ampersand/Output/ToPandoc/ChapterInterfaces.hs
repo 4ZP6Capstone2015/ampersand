@@ -11,9 +11,6 @@ import Database.Design.Ampersand.FSpec.FPA
 import Database.Design.Ampersand.Output.PandocAux
 import Database.Design.Ampersand.Output.ToPandoc.SharedAmongChapters
 
-fatal :: Int -> String -> a
-fatal = fatalMsg "Output.ToPandoc.ChapterInterfaces"
-
 chpInterfacesBlocks :: Int -> FSpec -> Blocks
 chpInterfacesBlocks lev fSpec = -- lev is the header level (0 is chapter level)
   mconcat $ map interfaceChap regularInterfaces ++ [ messagesChap messageInterfaces | not (null messageInterfaces) ]
@@ -124,7 +121,7 @@ chpInterfacesBlocks lev fSpec = -- lev is the header level (0 is chapter level)
     docMSubInterface editableRels roles hierarchy subIfc =
       case subIfc of
         Nothing                -> []
-        Just (InterfaceRef isLink nm) -> [ plainText $ (if isLink then "LINKTO " else "")++"REF "++nm ] -- TODO: handle InterfaceRef
+        Just (InterfaceRef isLink nm _) -> [ plainText $ (if isLink then "LINKTO " else "")++"REF "++nm ] -- TODO: handle InterfaceRef
         Just (Box _ _ objects) -> [ docInterfaceObjects editableRels roles (hierarchy ++[i]) obj | (obj,i) <- zip objects [1..] ]
 
     docCrudMatrix :: Interface -> Blocks
@@ -159,13 +156,13 @@ chpInterfacesBlocks lev fSpec = -- lev is the header level (0 is chapter level)
             nbsp = RawInline (Format "latex") "~"
 
 -- TODO: copied from prototype GenBericht.hs, if that module is kept, we should move this to a shared module.  
-data Entity = Entity { entName ::     String
-                     , depth ::       Int
-                     , expr ::        String
-                     , cardinality :: String
-                     , definition ::  String
-                     , refType ::     String
-                     , properties ::  [Entity]
+data Entity = Entity { entName ::      String
+                     , depth ::        Int
+                     , expr ::         String
+                     , cardinality ::  String
+                     , definition ::   String
+                     , refType ::      String
+                     , associations :: [Entity]
                      } deriving Show
 
 genEntity_Interfaces :: FSpec -> [Interface] -> [Entity]
@@ -182,11 +179,11 @@ genEntity_Interfaces fSpec interfaces = map genEntity_Interface interfaces
                   , cardinality = card $ objctx objDef
                   , definition  = defn $ objctx objDef
                   , refType     = name (target $ objctx objDef)
-                  , properties  =
+                  , associations  =
                       case objmsub objDef of
                         Nothing -> []
                         Just (Box _ _ objs)      -> map (genEntity_ObjDef (dpth+1)) objs
-                        Just (InterfaceRef _ nm) -> map (genEntity_ObjDef (dpth+1)) $ objsForInterfaceNamed nm
+                        Just (InterfaceRef _ nm _) -> map (genEntity_ObjDef (dpth+1)) $ objsForInterfaceNamed nm
                   }
         where card e = (if isTot e then "1" else "0")++".."++(if isUni e then "1" else "*")
   

@@ -27,8 +27,8 @@ Class Atom {
 		$this->label = is_null($this->view) ? $this->id : implode($this->view); // no view? label = id
 		
 		// JSON-LD attributes
-		$this->jsonld_id = JSONLD_ID_PATH . $concept . '/' . $this->id;
-		$this->jsonld_type = JSONLD_TYPE_PATH . $concept;
+		$this->jsonld_id = Config::get('serverURL') . Config::get('apiPath') . '/resource/' . $concept . '/' . $this->id;
+		$this->jsonld_type = Config::get('serverURL') . Config::get('apiPath') . '/concept/' . $concept;
 
 	}
 	
@@ -40,7 +40,7 @@ Class Atom {
 	}
 	
 	public function getAtom($interface = null){
-		foreach(InterfaceObject::getAllInterfacesForConcept($this->concept) as $interfaceId) $interfaces[] = $this->jsonld_id . '/' . $interfaceId;
+		foreach(InterfaceObject::getAllInterfacesForConcept($this->concept) as $ifc) $interfaces[] = $this->jsonld_id . '/' . $ifc->id;
 		
 		$result =  array('@id' => $this->jsonld_id
 						,'@label' => $this->label
@@ -78,7 +78,7 @@ Class Atom {
 			$tgtAtom = new Atom($tgtAtomId, $interface->tgtConcept, $interface->viewId);
 			
 			// Add @context for JSON-LD to rootElement
-			if($rootElement) $content['@context'] = JSONLD_CONTEXT_PATH . $interface->id;
+			if($rootElement) $content['@context'] = Config::get('serverURL') . Config::get('apiPath') . '/interface/' . $interface->id;
 			
 			// Leaf
 			if(empty($interface->subInterfaces) && empty($interface->refInterfaceId)){
@@ -96,8 +96,8 @@ Class Atom {
 						
 						// Define interface(s) to navigate to for this tgtAtom
 						$atomInterfaces = array();
-						if($interface->isLinkTo && !$inclLinktoData && $session->role->isInterfaceForRole($interface->refInterfaceId)) $atomInterfaces[] = array('id' => $interface->refInterfaceId, 'label' => $interface->refInterfaceId);
-						elseif(isset($session->role)) $atomInterfaces = array_map(function($o) { return array('id' => $o->id, 'label' => $o->label); }, $session->role->getInterfacesToReadConcept($interface->tgtConcept));
+						if($interface->isLinkTo && !$inclLinktoData && $session->isAccessibleIfc($interface->refInterfaceId)) $atomInterfaces[] = array('id' => $interface->refInterfaceId, 'label' => $interface->refInterfaceId);
+						else $atomInterfaces = array_map(function($o) { return array('id' => $o->id, 'label' => $o->label); }, $session->getInterfacesToReadConcept($interface->tgtConcept));
 							
 						// Add meta data elements
 						$content = array_merge($content, array (  '@id' => $tgtAtom->jsonld_id
@@ -126,8 +126,8 @@ Class Atom {
 					
 					// Define interface(s) to navigate to for this tgtAtom
 					$atomInterfaces = array();
-					if($interface->isLinkTo && !$inclLinktoData && $session->role->isInterfaceForRole($interface->refInterfaceId)) $atomInterfaces[] = array('id' => $interface->refInterfaceId, 'label' => $interface->refInterfaceId);
-					elseif(isset($session->role)) $atomInterfaces = array_map(function($o) { return array('id' => $o->id, 'label' => $o->label); }, $session->role->getInterfacesToReadConcept($interface->tgtConcept));
+					if($interface->isLinkTo && !$inclLinktoData && $session->isAccessibleIfc($interface->refInterfaceId)) $atomInterfaces[] = array('id' => $interface->refInterfaceId, 'label' => $interface->refInterfaceId);
+					else $atomInterfaces = array_map(function($o) { return array('id' => $o->id, 'label' => $o->label); }, $session->getInterfacesToReadConcept($interface->tgtConcept));
 						
 					// Add meta data elements
 					$content = array_merge($content, array (  '@id' => $tgtAtom->jsonld_id
@@ -647,11 +647,12 @@ Class Atom {
 	public function typeConversion($value, $concept){
 		switch(Concept::getTypeRepresentation($concept)){
 			case "DATE" :
-				$date = new DateTime($value);
-				return $date->format('Y-m-d');
-			case "DATETIME" :
 				$datetime = new DateTime($value);
-				return $datetime->format('Y-m-d H:i:s');
+				return $datetime->format('Y-m-d'); // format in ISO-8601 standard
+			case "DATETIME" :
+				$datetime = new DateTime($value, new DateTimeZone('UTC')); // datetimes are stored in UTC in database
+				$datetime->setTimezone(new DateTimeZone(date_default_timezone_get())); // convert back to systemtime
+				return $datetime->format(DateTime::ATOM); // format in ISO-8601 standard, i.e. 2005-08-15T15:52:01+00:00 (DateTime::ATOM)
 			case "INTEGER" :
 				return (int) $value;
 			case "BOOLEAN" :

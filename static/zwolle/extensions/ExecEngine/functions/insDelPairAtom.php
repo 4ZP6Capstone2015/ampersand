@@ -43,14 +43,14 @@ function InsPair($relationName,$srcConcept,$srcAtom,$tgtConcept,$tgtAtom){
 		// if srcAtom is specified as _NEW, a new atom of srcConcept is created
 	    if($srcAtom == "_NEW"){
 			$srcAtom = $database->addAtomToConcept(Concept::createNewAtom($srcConcept), $srcConcept);
-		}elseif(!$database->atomExists($srcAtom, $srcConcept)){
+		}else{
 			$database->addAtomToConcept($srcAtom, $srcConcept);
 		}
 		
 		// if tgtAtom is specified as _NEW, a new atom of tgtConcept is created
 		if($tgtAtom == "_NEW"){
 			$tgtAtom = $database->addAtomToConcept(Concept::createNewAtom($tgtConcept), $tgtConcept);
-		}elseif(!$database->atomExists($tgtAtom, $tgtConcept)){
+		}else{
 			$database->addAtomToConcept($tgtAtom, $tgtConcept);
 		}
 		
@@ -151,7 +151,10 @@ function NewStruct(){ // arglist: ($ConceptC[,$newAtom][,$relation,$srcConcept,$
 			if($srcAtom == "NULL" or $tgtAtom == "NULL") throw new Exception("Use of keyword NULL is deprecated, use '_NEW'", 500);
 			
 			// if either srcAtom or tgtAtom is not provided by the pairview function (i.e. value set to '_NULL'): skip the insPair
-			if($srcAtom == '_NULL' or $tgtAtom == '_NULL') continue; 
+			if($srcAtom == '_NULL' or $tgtAtom == '_NULL') {
+				Notifications::addLog("Skipping insPair $relation, because source and tgt are null", 'ExecEngine');
+				continue; 
+			}
 			
 			// populate relation r1, first checking for allowed syntax:		
 			if (!($srcAtom == '_NEW' or $tgtAtom == '_NEW')){ // Note: when populating a [PROP] relation, both atoms can be new

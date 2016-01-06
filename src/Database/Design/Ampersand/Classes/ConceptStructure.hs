@@ -9,9 +9,6 @@ import Database.Design.Ampersand.ADL1.Expression(primitives,isMp1,foldrMapExpres
 import Database.Design.Ampersand.Classes.ViewPoint
 import Prelude hiding (Ordering(..))
 
-fatal :: Int -> String -> a
-fatal = fatalMsg "Classes.ConceptStructure"
-
 {- TODO: Interface parameters (of type Declaration) are returned as Expressions by expressionsIn, to preserve the meaning of relsMentionedIn
    (implemented using primsMentionedIn, which calls expressionsIn). A more correct way to do this would be to not use expressionsIn, but
    define relsMentionedIn directly.
@@ -21,14 +18,14 @@ fatal = fatalMsg "Classes.ConceptStructure"
 -}
 
 class ConceptStructure a where
-  concs ::    a -> [A_Concept]       -- ^ the set of all concepts used in data structure a
-  relsUsedIn :: a -> [Declaration]        -- ^ the set of all declaratons used within data structure a. `used within` means that there is a relation that refers to that declaration.
+  concs ::      a -> [A_Concept]               -- ^ the set of all concepts used in data structure a
+  relsUsedIn :: a -> [Declaration]             -- ^ the set of all declaratons used within data structure a. `used within` means that there is a relation that refers to that declaration.
   relsUsedIn a = [ d | d@Sgn{}<-relsMentionedIn a]++[Isn c | c<-concs a]
   relsMentionedIn :: a -> [Declaration]        -- ^ the set of all declaratons used within data structure a. `used within` means that there is a relation that refers to that declaration.
   relsMentionedIn = nub . map prim2rel . primsMentionedIn
   primsMentionedIn :: a -> [Expression]
   primsMentionedIn = nub . concatMap primitives . expressionsIn
-  expressionsIn :: a -> [Expression] -- ^The set of all expressions within data structure a
+  expressionsIn :: a -> [Expression] -- ^ The set of all expressions within data structure a
   
   -- | mp1Pops draws the population from singleton expressions.
   mp1Pops :: ContextInfo -> a -> [Population]

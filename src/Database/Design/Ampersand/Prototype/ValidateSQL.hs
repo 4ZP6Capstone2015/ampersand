@@ -16,9 +16,6 @@ with the results from Haskell-based Ampersand rule evaluator. The latter is much
 therefore most likely to be correct in case of discrepancies.
 -}
 
---fatal :: Int -> String -> a
---fatal = fatalMsg "ValidateSQL"
-
 tempDbName :: String
 tempDbName = "ampersand_temporaryvalidationdb"
 
@@ -62,7 +59,7 @@ getAllInterfaceExps :: FSpec -> [ValidationExp]
 getAllInterfaceExps fSpec = concat [ getObjExps (name ifc) $ ifcObj ifc
                                    | ifc <- interfaceS fSpec ++ interfaceG fSpec ]
  where getObjExps iName objDef = (objctx objDef, "interface " ++ show iName) :
-                                 concatMap (getObjExps iName) (attributes objDef)
+                                 concatMap (getObjExps iName) (fields objDef)
 
 -- we check the complement of the rule, since that is the expression evaluated in the prototype
 getAllRuleExps :: FSpec -> [ValidationExp]

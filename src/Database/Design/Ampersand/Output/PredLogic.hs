@@ -11,9 +11,6 @@ import Database.Design.Ampersand.FSpec.ShowADL
 import Data.Char
 import Database.Design.Ampersand.Output.PandocAux (latexEscShw,texOnly_Id)
 
-fatal :: Int -> String -> a
-fatal = fatalMsg "Output.PredLogic"
-
 --  data PredVar = PV String     -- TODO Bedoeld om predicaten inzichtelijk te maken. Er bestaan namelijk nu verschillende manieren om hier mee om te gaan (zie ook Motivations. HJO.
 data PredLogic
  = Forall [Var] PredLogic            |
@@ -485,7 +482,7 @@ assemble expr
    denote :: Expression -> Notation
    denote e = case e of
       (EDcD d)
-        | null([Uni,Inj,Tot,Sur] >- multiplicities d)  -> Rn
+        | null([Uni,Inj,Tot,Sur] >- properties d)  -> Rn
         | isUni d && isTot d                           -> Flr
         | isInj d && isSur d                           -> Frl
         | otherwise                                    -> Rn

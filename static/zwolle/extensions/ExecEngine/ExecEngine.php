@@ -1,23 +1,28 @@
 <?php
-
 // Define hooks
-$GLOBALS['hooks']['before_Database_transaction_checkInvariantRules'][] = 'ExecEngine::run';
-$GLOBALS['hooks']['before_API_getAllNotifications_getViolations'][] = 'ExecEngine::run';
-$GLOBALS['hooks']['after_Viewer_load_angularScripts'][] = 'extensions/ExecEngine/ui/js/ExecEngine.js';
+$hook1 = array('class' => 'ExecEngine', 'function' => 'run', 'filename' => 'ExecEngine.php', 'filepath' => 'extensions/ExecEngine', 'params' => array());
+Hooks::addHook('preDatabaseCloseTransaction', $hook1);
+$hook2 = array('class' => 'ExecEngine', 'function' => 'run', 'filename' => 'ExecEngine.php', 'filepath' => 'extensions/ExecEngine', 'params' => array(true));
+Hooks::addHook('postDatabaseReinstallDB', $hook2);
 
-// Put ExecEngine extension in applications menu
+// UI
 $GLOBALS['navBar']['refreshMenu'][] = array ( 'url' =>	'extensions/ExecEngine/ui/views/MenuItem.html');
+AngularApp::addJS('extensions/ExecEngine/ui/js/ExecEngine.js');
 
-Config::set('execEngineRoleName', 'execEngine', 'ExecEngine'); // Can be overwritten in localSettings.php
-Config::set('maxRunCount', 'execEngine', 10); // Can be overwritten in localSettings.php
+// Config (can be overwritten in localSettings.php)
+Config::set('execEngineRoleName', 'execEngine', 'ExecEngine');
+Config::set('autoRerun', 'execEngine', true);
+Config::set('maxRunCount', 'execEngine', 10);
 
 class ExecEngine {
 	
 	private static $roleName;
 	public static $doRun = true;
+	public static $autoRerun;
 	public static $runCount;
 	
-	public static function run(){
+	public static function run($allRules = false){
+		$database = Database::singleton();
 		
 		Notifications::addLog('------------------------- EXEC ENGINE STARTED -------------------------', 'ExecEngine');
 		
@@ -34,6 +39,7 @@ class ExecEngine {
 		
 		$maxRunCount = Config::get('maxRunCount', 'execEngine');
 		self::$runCount = 0;
+		self::$autoRerun = Config::get('autoRerun', 'execEngine');
 		
 		if($role){
 			// Get all rules that are maintained by the ExecEngine
@@ -42,22 +48,44 @@ class ExecEngine {
 				self::$runCount++;
 				if(self::$runCount > $maxRunCount) throw new Exception('Maximum reruns exceeded for ExecEngine (rules with violations:' . implode(', ', $rulesThatHaveViolations). ')', 500);
 				
-				Notifications::addLog("ExecEngine run (" . self::$runCount . ") for role '" . $role->label . "'", 'ExecEngine');
+				Notifications::addLog("ExecEngine run #" . self::$runCount . " (auto rerun: " . var_export(self::$autoRerun, true) . ") for role '" . $role->label . "'", 'ExecEngine');
+				
+				// Determine affected rules that must be checked by the exec engine
+				$affectedConjuncts = (array)RuleEngine::getAffectedInvConjuncts($database->getAffectedConcepts(), $database->getAffectedRelations());
+				$affectedConjuncts = array_merge($affectedConjuncts, (array)RuleEngine::getAffectedSigConjuncts($database->getAffectedConcepts(), $database->getAffectedRelations()));
+				
+				$affectedRules = array();
+				foreach($affectedConjuncts as $conjunctId){
+					$conjunct = RuleEngine::getConjunct($conjunctId);
+					foreach ($conjunct['invariantRuleNames'] as $ruleName) $affectedRules[] = $ruleName;
+					foreach ($conjunct['signalRuleNames'] as $ruleName) $affectedRules[] = $ruleName;
+				}
+				
+				// Check rules
 				$rulesThatHaveViolations = array();
-				foreach ($role->maintains as $ruleName){
+				foreach ($role->maintains() as $ruleName){
+					if(!in_array($ruleName, $affectedRules) && !$allRules) continue; // skip this rule
+					
 					$rule = RuleEngine::getRule($ruleName);
 					$violations = RuleEngine::checkRule($rule, false);
 					
-					if(count($violations)) $rulesThatHaveViolations[] = $rule['name'];
-					// Fix violations for every rule
-					ExecEngine::fixViolations($rule, $violations); // Conjunct violations are not cached, because they are fixed by the ExecEngine 
+					if(count($violations)){
+						$rulesThatHaveViolations[] = $rule['name'];
+						
+						// Fix violations for every rule
+						ExecEngine::fixViolations($rule, $violations); // Conjunct violations are not cached, because they are fixed by the ExecEngine
+						
+						// If $autoRerun, set $doRun to true because violations have been fixed (this may fire other execEngine rules)
+						if(self::$autoRerun) self::$doRun = true;
+					}
+					 
 				}
 				
 				
 			}
 			
 		}else{
-			Notifications::addInfo("ExecEngine role '" . self::$roleName . "' not found.");
+			Notifications::addInfo("ExecEngine extension included but role '" . self::$roleName . "' not found.");
 		}
 		
 		Notifications::addLog('------------------------- END OF EXEC ENGINE -------------------------', 'ExecEngine');
@@ -94,8 +122,9 @@ class ExecEngine {
 					$params = array_map('phpArgumentInterpreter', $params); // Evaluate phpArguments, using phpArgumentInterpreter function
 					
 					$function = array_shift($params); // First parameter is function name
+					$classMethod = (array)explode('::', $function);
 					
-					if (function_exists($function)){
+					if (function_exists($function) || method_exists($classMethod[0], $classMethod[1])){
 						$successMessage = call_user_func_array($function,$params);
 						Notifications::addLog($successMessage, 'ExecEngine');
 						
@@ -114,7 +143,7 @@ class ExecEngine {
 		$database = Database::singleton();
 		
 		$pairStrs = array();
-		foreach ($pairView as $segment){ 
+		foreach ((array)$pairView as $segment){ 
 			// text segment		
 			if ($segment['segmentType'] == 'Text'){
 				$pairStrs[] = $segment['Text'];

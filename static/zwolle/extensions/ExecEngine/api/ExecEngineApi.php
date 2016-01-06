@@ -8,27 +8,27 @@ class ExecEngineApi{
 	/****************************** PARSE FILE ******************************/
 	/**
 	 * @url GET run
+	 * @param array $roleIds
 	 */
-	public function run(){
+	public function run($roleIds = null){
 		try{
 			$session = Session::singleton();
-			$db = Database::singleton();
+			$session->activateRoles($roleIds);
 			
-			$allowedRoles = (array)Config::get('allowedRolesForRunFunction','execEngine');
-			if(LOGIN_ENABLED && !is_null($allowedRoles)){
+			// Check sessionRoles if allowedRolesForRunFunction is specified
+			$allowedRoles = Config::get('allowedRolesForRunFunction','execEngine');
+			if(!is_null($allowedRoles)){
 				$ok = false;
 				
-				$sessionRoles = Role::getAllSessionRoles(session_id());
-				foreach($sessionRoles as $role){
+				foreach($session->getSessionRoles() as $role){
 					if(in_array($role->label, $allowedRoles)) $ok = true;
 				}
 				if(!$ok) throw new Exception("You do not have access to run the exec engine", 401);
-			}
-				
-			$session->setRole();
+			}			
 			
-			// ExecEngine::run(); // Not required, because closeTransaction call below already kicks the ExecEngine
+			ExecEngine::run(true);
 			
+			$db = Database::singleton();
 			$db->closeTransaction('Run completed',false,true,false);
 			
 			$result = array('notifications' => Notifications::getAll());

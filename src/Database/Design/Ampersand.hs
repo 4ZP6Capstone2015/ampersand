@@ -18,14 +18,14 @@ module Database.Design.Ampersand
    , Expression(..)
    , Population(..)
    , FSpec(..), concDefs
-   , PlugSQL(..), SqlField(..), SqlTType(..), PlugInfo(..)
+   , PlugSQL(..), SqlAttribute(..), SqlTType(..), PlugInfo(..)
    , PAclause(..)
    , Rule(..)
    , Prop(..), RuleOrigin(..)
    , Lang(..)
-   , SqlFieldUsage(..)
+   , SqlAttributeUsage(..)
    , DnfClause(..)
-   , Options(..), DocTheme(..)
+   , Options(..)
    , FilePos(..), Origin(..)
    , mkPair
    -- * Classes:
@@ -44,7 +44,7 @@ module Database.Design.Ampersand
    , Language(..)
    , ShowHS(..), ShowHSName(..), haskellIdentifier
    -- * Functions on concepts
-   , (<==>),meet,join,sortWith,atomValuesOf
+   , (<==>),sortWith,atomValuesOf
    , smallerConcepts, largerConcepts, rootConcepts
    -- * Functions on relations
    -- * Functions on rules
@@ -58,7 +58,7 @@ module Database.Design.Ampersand
    , deMorganERad, deMorganECps, deMorganEUni, deMorganEIsc
    , exprUni2list, exprIsc2list, exprCps2list, exprRad2list, exprPrd2list
    -- * Functions with plugs:
-   , showPlug, plugFields, fldauto
+   , plugAttributes, fldauto
    -- * Parser related stuff
    , parseADL1pExpr, CtxError
    , createFSpec
@@ -74,7 +74,7 @@ module Database.Design.Ampersand
    , verboseLn, verbose
    ,helpNVersionTexts
    -- * Other functions
-   , eqCl, showErr, unCap,upCap,escapeNonAlphaNum, fatalMsg
+   , eqCl, showErr, unCap,upCap,escapeNonAlphaNum
    , ampersandVersionStr, ampersandVersionWithoutBuildTimeStr
    , Database.Design.Ampersand.Basics.putStr
    , Database.Design.Ampersand.Basics.hGetContents
@@ -103,6 +103,5 @@ import Database.Design.Ampersand.Input
 import Database.Design.Ampersand.Misc
 import Database.Design.Ampersand.Components
 import Database.Design.Ampersand.ADL1.Expression (isPos,isNeg,foldrMapExpression)
-import Database.Design.Ampersand.FSpec.ToFSpec.ADL2Plug (showPlug)
 import Database.Design.Ampersand.FSpec.ToFSpec.NormalForms
 import Database.Design.Ampersand.ADL1.P2A_Converters

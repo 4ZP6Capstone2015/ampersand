@@ -2,7 +2,7 @@
 module Database.Design.Ampersand.Misc.Options
         (Options(..),getOptions,usageInfo'
         ,verboseLn,verbose,FSpecFormat(..)
-        ,DocTheme(..),helpNVersionTexts
+        , helpNVersionTexts
         ,MetaType(..)
         )
 where
@@ -21,12 +21,10 @@ import Prelude hiding (writeFile,readFile,getContents,putStr,putStrLn)
 import Data.List
 import Data.Char
 
-fatal :: Int -> String -> a
-fatal = fatalMsg "Misc.Options"
-
 -- | This data constructor is able to hold all kind of information that is useful to
 --   express what the user would like Ampersand to do.
 data Options = Options { showVersion :: Bool
+                       , printName :: Bool 
                        , preVersion :: String
                        , postVersion :: String  --built in to aid DOS scripting... 8-(( Bummer.
                        , showHelp :: Bool
@@ -43,7 +41,6 @@ data Options = Options { showVersion :: Bool
                        , testRule :: Maybe String
                        , customCssFile :: Maybe FilePath
                                                    --class Populated a where populate::a->b->a
-                       , theme :: DocTheme --the theme of some generated output. (style, content differentiation etc.)
                        , genFSpec :: Bool   -- if True, generate a functional specification
                        , diag :: Bool   -- if True, generate a diagnosis only
                        , fspecFormat :: FSpecFormat -- the format of the generated (pandoc) document(s)
@@ -83,7 +80,7 @@ data Options = Options { showVersion :: Bool
                        , sqlLogin :: String  -- pass login name to the database server
                        , sqlPwd :: String  -- pass password on to the database server
                        , oldNormalizer :: Bool
-                       , newFrontend :: Bool
+                       , iDirs :: [String] -- Dirs to look for includes - default . 
                        }
 
 getOptions :: IO Options
@@ -117,66 +114,66 @@ getOptions =
                    _   -> error ("too many files: "++ intercalate ", " fNames  ++ usage)
 
       let startOptions =
-               Options {genTime       = localTime
-                      , dirOutput     = fromMaybe "."       (lookup envdirOutput    env)
-                      , outputfile    = fatal 83 "No monadic options available."
-                      , dirPrototype  = fromMaybe ("." </> (addExtension (takeBaseName fName) ".proto"))
-                                                  (lookup envdirPrototype env) </> (addExtension (takeBaseName fName) ".proto")
-                      , dbName        = map toLower $ fromMaybe ("ampersand_"++takeBaseName fName) (lookup envdbName env)
-                      , dirExec       = takeDirectory exePath
+               Options {genTime          = localTime
+                      , printName        = False 
+                      , dirOutput        = fromMaybe "."       (lookup envdirOutput    env)
+                      , outputfile       = fatal 83 "No monadic options available."
+                      , dirPrototype     = fromMaybe ("." </> (addExtension (takeBaseName fName) ".proto"))
+                                                     (lookup envdirPrototype env) </> (addExtension (takeBaseName fName) ".proto")
+                      , dbName           = map toLower $ fromMaybe ("ampersand_"++takeBaseName fName) (lookup envdbName env)
+                      , dirExec          = takeDirectory exePath
                       , ampersandDataDir = dataDir
-                      , preVersion    = fromMaybe ""        (lookup "CCPreVersion"  env)
-                      , postVersion   = fromMaybe ""        (lookup "CCPostVersion" env)
-                      , theme         = DefaultTheme
-                      , showVersion   = False
-                      , showHelp      = False
-                      , verboseP      = False
-                      , development   = False
-                      , validateSQL   = False
-                      , validateEdit  = Nothing
-                      , genPrototype  = False
-                      , allInterfaces = False
-                      , namespace     = ""
-                      , autoRefresh   = Nothing
-                      , testRule      = Nothing
-                      , customCssFile = Nothing
-                      , genFSpec      = False
-                      , diag          = False
-                      , fspecFormat   = fatal 105 $ "Unknown fspec format. Currently supported formats are "++allFSpecFormats++"."
-                      , genEcaDoc     = False
-                      , proofs        = False
-                      , haskell       = False
-                      , crowfoot      = False
-                      , blackWhite    = False
-                      , doubleEdges   = True
-                      , showPredExpr  = False
-                      , noDiagnosis   = False
-                      , diagnosisOnly = False
-                      , genLegalRefs  = False
-                      , genUML        = False
-                      , genFPAChap    = False
-                      , genFPAExcel   = False
-                      , genStaticFiles= True
-                      , genPOPExcel   = False
-                      , genBericht    = False
-                      , language      = Nothing
-                      , progrName     = progName
-                      , fileName      = if hasExtension fName
-                                        then fName
-                                        else addExtension fName "adl"
-                      , baseName      = takeBaseName fName
-                      , export2adl    = False
-                      , test          = False
+                      , preVersion       = fromMaybe ""        (lookup "CCPreVersion"  env)
+                      , postVersion      = fromMaybe ""        (lookup "CCPostVersion" env)
+                      , showVersion      = False
+                      , showHelp         = False
+                      , verboseP         = False
+                      , development      = False
+                      , validateSQL      = False
+                      , validateEdit     = Nothing
+                      , genPrototype     = False
+                      , allInterfaces    = False
+                      , namespace        = ""
+                      , autoRefresh      = Nothing
+                      , testRule         = Nothing
+                      , customCssFile    = Nothing
+                      , genFSpec         = False
+                      , diag             = False
+                      , fspecFormat      = fatal 105 $ "Unknown fspec format. Currently supported formats are "++allFSpecFormats++"."
+                      , genEcaDoc        = False
+                      , proofs           = False
+                      , haskell          = False
+                      , crowfoot         = False
+                      , blackWhite       = False
+                      , doubleEdges      = True
+                      , showPredExpr     = False
+                      , noDiagnosis      = False
+                      , diagnosisOnly    = False
+                      , genLegalRefs     = False
+                      , genUML           = False
+                      , genFPAChap       = False
+                      , genFPAExcel      = False
+                      , genStaticFiles   = True
+                      , genPOPExcel      = False
+                      , genBericht       = False
+                      , language         = Nothing
+                      , progrName        = progName
+                      , fileName         = if hasExtension fName
+                                           then fName
+                                           else addExtension fName "adl"
+                      , baseName         = takeBaseName fName
+                      , export2adl       = False
+                      , test             = False
                       , genGenericTables = False
-                      , genGenericsFile       = False
+                      , genGenericsFile  = False
                       , genASTTables     = False
-                      , genASTFile    = False
+                      , genASTFile       = False
                       , metaTablesHaveUnderscore = False
-                      , sqlHost       = "localhost"
-                      , sqlLogin      = "ampersand"
-                      , sqlPwd        = "ampersand"
-                      , oldNormalizer = True -- The new normalizer still has a few bugs, so until it is fixed we use the old one as the default
-                      , newFrontend   = True
+                      , sqlHost          = "localhost"
+                      , sqlLogin         = "ampersand"
+                      , sqlPwd           = "ampersand"
+                      , oldNormalizer    = True -- The new normalizer still has a few bugs, so until it is fixed we use the old one as the default
+                      , iDirs            = []
                       }
       -- Here we thread startOptions through all supplied option actions
       opts <- foldl (>>=) (return startOptions) actions
@@ -201,14 +198,6 @@ allFSpecFormats = "["++intercalate ", "
           f fmt = case show fmt of
                     _:h:t -> toUpper h : map toLower t
                     x     -> x 
-
-data DocTheme = DefaultTheme   -- Just the functional specification
-              | ProofTheme     -- A document with type inference proofs
-              | StudentTheme   -- Output for normal students of the business rules course
-              | StudentDesignerTheme   -- Output for advanced students of the business rules course
-              | DesignerTheme   -- Output for non-students
-                 deriving (Show, Eq)
-
 
 type OptionDef = OptDescr (Options -> IO Options)
 options :: [(OptionDef, DisplayMode) ]
@@ -249,16 +238,6 @@ options = [ (Option ['v']   ["version"]
                                                          else map toLower nm}
                        ) "NAME")
                ("database name (overrules environment variable "++ envdbName ++ ", defaults to filename)")
-            , Public)
-          , (Option []      ["theme"]
-               (ReqArg (\t opts -> return opts{theme = case map toUpper t of
-                                                          "STUDENT"  -> StudentTheme
-                                                          "STUDENTDESIGNER" -> StudentDesignerTheme
-                                                          "DESIGNER" -> DesignerTheme
-                                                          "PROOF"    -> ProofTheme
-                                                          _          -> DefaultTheme}
-                        ) "THEME")
-               "differentiate between certain outputs e.g. student"
             , Public)
           , (Option ['x']     ["interfaces"]
                (NoArg (\opts -> return opts{allInterfaces  = True}))
@@ -419,21 +398,6 @@ options = [ (Option ['v']   ["version"]
                (NoArg  (\opts -> return opts{genStaticFiles = False}))
                "Do not generate static files into the prototype directory"
             , Public)
-          , (Option []        ["sqlHost"]
-               (ReqArg (\nm opts -> return opts{sqlHost = nm}
-                       ) "HOSTNAME")
-               "specify database host name."
-            , Hidden)
-          , (Option []        ["sqlLogin"]
-               (ReqArg (\nm opts -> return opts{sqlLogin = nm}
-                       ) "NAME")
-               "specify database login name."
-            , Hidden)
-          , (Option []        ["sqlPwd"]
-               (ReqArg (\nm opts -> return opts{sqlPwd = nm}
-                       ) "STR")
-               "specify database password."
-            , Hidden)
           , (Option []        ["oldNormalizer"]
                (NoArg (\opts -> return opts{oldNormalizer = True}))
                "use the old normalizer at your own risk."
@@ -442,11 +406,15 @@ options = [ (Option ['v']   ["version"]
                (NoArg (\opts -> return opts{oldNormalizer = False}))
                "use the new normalizer at your own risk." -- :-)
             , Hidden)
-          , (Option []        ["newFrontend"]
-               (NoArg (\opts -> do putStrLn "WARNING: Option '--newFrontend' is obsolete, and will soon be removed. The only supported interface currently is the Zwolle interface."
-                                   return opts{newFrontend = True}))
-               "Use the new frontend."
-            , Hidden)
+          , (Option []        ["printName"]
+               (NoArg (\opts -> return opts{printName = True}))
+               "Print the name of the specification." 
+            , Public)
+          , (Option ['I']      ["include"]
+               (ReqArg (\idir opts -> return $ opts{iDirs = idir:iDirs opts}
+                       ) "Directory")
+               "Include directory (relative or absolute) - where to look for included modules; default is '.'"
+            , Public)
           ]
 
 usageInfo' :: Options -> String

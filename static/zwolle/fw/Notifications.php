@@ -1,5 +1,13 @@
 <?php
 
+// Default notification settings
+Config::set('defaultShowViolations', 'notifications', true);
+Config::set('defaultShowInfos', 'notifications', false);
+Config::set('defaultShowSuccesses', 'notifications', true);
+Config::set('defaultAutoHideSuccesses', 'notifications', true);
+Config::set('defaultShowErrors', 'notifications', true);
+Config::set('defaultShowInvariants', 'notifications', true);
+
 class Notifications {
 	
 	static $errors = array();
@@ -51,15 +59,13 @@ class Notifications {
 		
 		// Make links to interfaces
 		$links = array();
-		if(isset($session->role)){
-			foreach ($session->role->getInterfacesToReadConcept($rule['srcConcept']) as $interface){
-				$links[] = '#/' . $interface->id . '/' . $srcAtom;
-			}
-			foreach ($session->role->getInterfacesToReadConcept($rule['tgtConcept']) as $interface){
-				$links[] = '#/' . $interface->id . '/' . $tgtAtom;
-			}
-			$links = array_unique($links);
+		foreach ($session->getInterfacesToReadConcept($rule['srcConcept']) as $interface){
+			$links[] = '#/' . $interface->id . '/' . $srcAtom;
 		}
+		foreach ($session->getInterfacesToReadConcept($rule['tgtConcept']) as $interface){
+			$links[] = '#/' . $interface->id . '/' . $tgtAtom;
+		}
+		$links = array_unique($links);
 		
 		self::$violations[$ruleHash]['tuples'][] = array('violationMessage' => $violationMessage
 														,'links' => $links);
@@ -147,11 +153,5 @@ class Notifications {
 					,'switchShowInvariants'		=> Config::get('defaultShowInvariants', 'notifications')
 					);
 	}
-	
-
 }
-
-
-
-
 ?>

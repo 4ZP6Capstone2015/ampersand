@@ -25,9 +25,6 @@ import Database.Design.Ampersand.Misc (Lang(..),Options(..),PandocFormat(ReST),s
 import Text.Pandoc.Builder
 import Prelude hiding (head)
 
-fatal :: Int -> String -> a
-fatal = fatalMsg "FSpec.ToFSpec.Calc"
-
 head :: [a] -> a
 head [] = fatal 30 "head must not be used on an empty list!"
 head (a:_) = a
@@ -250,6 +247,8 @@ checkMono opts expr ev dcl
               simplify (subst (dcl, actSem opts ev (EDcD dcl) (delta (sign dcl))) expr) ==
               simplify (consequent conclusion)
   where (conclusion,_,_) = last (derivMono expr ev dcl)
+
+data RuleType = Inclusion | Equivalence | Truth  deriving (Eq,Show)
 
 type Proof expr = [(expr,[String],String)]
 reversePrf :: Proof e -> Proof e
@@ -490,7 +489,7 @@ assembleECAs options context editables
                       (codeBlock . ("\n     "++) . showECA "\n     ".ecaRule) ruleNr
                     )
           )
-        | rel <- editables -- allDecls fSpec ++ [ Isn c | c<-allConcepts fSpec, c/=ONE] -- This is the relation in which a delta is being inserted or deleted.
+        | rel <- editables -- allDecls fSpec ++ [ Isn c | c<-concs fSpec, c/=ONE] -- This is the relation in which a delta is being inserted or deleted.
  --       , let relEq = [ q | q<-vquads fSpec, qDcl q==rel] -- Gather the quads with the same declaration (qDcl). A quad has a declaration (qDcl), a rule (qRule) and clauses qConjuncts
         , let EDcD delt = delta (sign rel)                -- delt is a placeholder for the pairs that have been inserted or deleted in rel.
         , ev<-[Ins,Del]

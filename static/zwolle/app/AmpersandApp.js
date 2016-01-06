@@ -1,5 +1,5 @@
 // when using minified angular modules, use module('myApp', []).controller('MyController', ['myService', function (myService) { ...
-var AmpersandApp = angular.module('AmpersandApp', ['ngResource', 'ngRoute', 'ngSanitize', 'restangular', 'ui.bootstrap', 'uiSwitch', 'cgBusy', 'siTable', 'ng-code-mirror', 'ngStorage', 'angularFileUpload', 'agGrid']);
+var AmpersandApp = angular.module('AmpersandApp', ['ngResource', 'ngRoute', 'ngSanitize', 'restangular', 'ui.bootstrap', 'uiSwitch', 'cgBusy', 'siTable', 'ng-code-mirror', 'ngStorage', 'angularFileUpload', 'agGrid', 'ui.bootstrap.datetimepicker']);
 
 AmpersandApp.config(function($routeProvider) {
 	$routeProvider
@@ -34,14 +34,16 @@ AmpersandApp.run(function(Restangular, $rootScope, $localStorage, $sessionStorag
 	
 	$sessionStorage.session = {'id' : initSessionId}; // initSessionId provided by index.php on startup application
 	$rootScope.notifications = {'errors' : []};
-	
-	if($localStorage.roleId === undefined){
-		$localStorage.roleId = 0; // set roleId to zero
-	}
 		
 	Restangular.addFullRequestInterceptor(function(element, operation, what, url, headers, params, element, httpConfig){
-		params['roleId'] = $localStorage.roleId;
-		params['sessionId'] = $sessionStorage.session.id;
+		var roleIds = [];
+		angular.forEach($sessionStorage.sessionRoles, function(role) {
+			if (role.active == true) {
+				roleIds.push(role.id);
+			}
+		});
+		
+		params['roleIds[]'] = roleIds; // the '[]' in param 'roleIds[]' is needed by the API to process it as array
 		return params;
 	});
 	
@@ -54,9 +56,8 @@ AmpersandApp.run(function(Restangular, $rootScope, $localStorage, $sessionStorag
     	var message = ((response.data || {}).error || {}).message || response.statusText;
     	
     	if(response.status == 401) {
-    		$localStorage.roleId = 0;
-    		$rootScope.refreshNavBar();
-    		$location.path('ext/Login');
+    		$rootScope.deactivateAllRoles();
+    		$location.path('ext/Login'); // add: if exists, otherwise do nothing
     	}
     	
     	$rootScope.addError( response.status + ' ' + message);

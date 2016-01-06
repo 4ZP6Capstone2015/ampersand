@@ -19,9 +19,6 @@ LoginModule.controller('LoginExtLoginController', function($scope, $rootScope, L
 }).controller('LoginExtLogoutController', function($scope, $rootScope, LoginRestangular, $location){
 	
 	$scope.logout = function(){
-		$rootScope.selectRole(0);
-		$location.path('/'); // goto home
-		
 		LoginRestangular.one('logout').get().then(
 			function(data){ // success
 				
@@ -31,6 +28,9 @@ LoginModule.controller('LoginExtLoginController', function($scope, $rootScope, L
 				
 			}
 		);
+		
+		$rootScope.deactivateAllRoles();
+		$location.path('/'); // goto home
 	}
 	
 });
@@ -40,7 +40,7 @@ app.config(function($routeProvider) {
 		// default start page
 		.when('/ext/Login',
 			{	controller: 'LoginExtLoginController'
-			,	templateUrl: 'extensions/Login/ui/views/Login.html'
+			,	templateUrl: 'extensions/OAuthLogin/ui/views/Login.html'
 			,	interfaceLabel: 'Login'
 			})
 });
@@ -48,6 +48,6 @@ app.config(function($routeProvider) {
 //Restangular service for the ExecEngine
 LoginModule.factory('LoginRestangular', function(Restangular) {
 	return Restangular.withConfig(function(RestangularConfigurer) {
-		RestangularConfigurer.setBaseUrl('extensions/Login/api');
+		RestangularConfigurer.setBaseUrl('extensions/OAuthLogin/api');
 	});
 });

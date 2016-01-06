@@ -9,9 +9,6 @@ import Database.Design.Ampersand.Classes.ConceptStructure
 import Database.Design.Ampersand.Classes.Relational
 import Database.Design.Ampersand.Core.AbstractSyntaxTree
 
-fatal :: Int -> String -> a
-fatal = fatalMsg "Crud"
-
 -- For a description of the algorithms in this module, see https://github.com/AmpersandTarski/ampersand/issues/45 
 
 -- NOTE: The definitions of the various CRUD aspects are still a bit quirky and will most-likely need refinement. 
@@ -42,17 +39,17 @@ getCrudObjectsForInterface crudInfo ifc =
     Just crudObjs -> crudObjs
   
 mkCrudInfo :: [A_Concept] -> [Declaration] -> [Interface] -> CrudInfo
-mkCrudInfo  allConceptsPrim allDecls allIfcs =
+mkCrudInfo  allConceptsPrim decls allIfcs =
   CrudInfo crudObjs crudObjsPerIfc (getCrudObjsPerConcept crudObjsPerIfc)
-  where allConcepts = [ c | c <- allConceptsPrim, not $ c == ONE || name c == "SESSION" ]
-        nonCrudConcpts = [ source d | d <- allDecls, isUni d && isSur d ] ++
-                         [ target d | d <- allDecls, isInj d && isTot d ]
-        crudCncpts = allConcepts \\ nonCrudConcpts
+  where allConcs = [ c | c <- allConceptsPrim, not $ c == ONE || name c == "SESSION" ]
+        nonCrudConcpts = [ source d | d <- decls, isUni d && isSur d ] ++
+                         [ target d | d <- decls, isInj d && isTot d ]
+        crudCncpts = allConcs \\ nonCrudConcpts
         
         transSurjClosureMap :: Map A_Concept [A_Concept]
         transSurjClosureMap = transClosureMap . Map.fromListWith union $
-          [ (target d, [source d]) | d <- allDecls, isSur d ] ++ -- TODO: no isUni?
-          [ (source d, [target d]) | d <- allDecls, isTot d ]    -- TODO: no isInj?
+          [ (target d, [source d]) | d <- decls, isSur d ] ++ -- TODO: no isUni?
+          [ (source d, [target d]) | d <- decls, isTot d ]    -- TODO: no isInj?
         
         
         -- crud concept together with its target concept in the surjective/total transitive closure of declarations
@@ -97,7 +94,7 @@ getAllInterfaceExprs :: [Interface] -> Interface -> [Expression]
 getAllInterfaceExprs allIfcs ifc = getExprs $ ifcObj ifc
   where getExprs Obj{objctx=expr, objmsub=subObj} = 
           expr : case subObj of Nothing                -> []
-                                Just (InterfaceRef _ nm) ->
+                                Just (InterfaceRef _ nm _) ->
                                   case filter (\rIfc -> name rIfc == nm) $ allIfcs of -- Follow interface ref
                                     []      -> fatal 65 $ "Referenced interface " ++ nm ++ " missing"
                                     (_:_:_) -> fatal 66 $ "Multiple declarations of referenced interface " ++ nm

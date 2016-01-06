@@ -1,28 +1,25 @@
 <?php
 
-class Database
-{	
+class Database {	
 	private $db_link;
-	
 	private $db_host;
 	private $db_user;
 	private $db_pass;
 	private $db_name;
 	
 	private $transaction;
+	private $trackAffectedConjuncts = true;
 	private $affectedConcepts = array(); // array with all affected Concepts during a transaction.
 	private $affectedRelations = array(); // array with all affected Relations during a transaction (must be fullRelationSignature! i.e. rel_<relationName>_<srcConcept>_<tgtConcept>).
 	
 	private static $_instance = null;
 	
 	// Prevent any outside instantiation of this object
-	private function __construct()
-	{
-		global $DB_host, $DB_user, $DB_pass, $DB_name; // from config.php
-		$this->db_host = $DB_host;
-		$this->db_user = $DB_user;
-		$this->db_pass = $DB_pass;
-		$this->db_name = $DB_name;
+	private function __construct(){
+		$this->db_host = Config::get('dbHost', 'mysqlDatabase');
+		$this->db_user = Config::get('dbUser', 'mysqlDatabase');
+		$this->db_pass = Config::get('dbPassword', 'mysqlDatabase');
+		$this->db_name = Config::get('dbName', 'mysqlDatabase');
 		
 		// Connect to MYSQL database
 		$this->db_link = new mysqli($this->db_host, $this->db_user, $this->db_pass);
@@ -51,7 +48,10 @@ class Database
 	}
 	
 	public static function createDB(){
-		global $DB_host, $DB_user, $DB_pass, $DB_name; // from config.php
+		$DB_host = Config::get('dbHost', 'mysqlDatabase');
+		$DB_user = Config::get('dbUser', 'mysqlDatabase');
+		$DB_pass = Config::get('dbPassword', 'mysqlDatabase');
+		$DB_name = Config::get('dbName', 'mysqlDatabase');
 		
 		// Connect to MYSQL database
 		$db_link = new mysqli($DB_host, $DB_user, $DB_pass);
@@ -75,23 +75,26 @@ class Database
 	}
 	
 	public function reinstallDB(){
-		global $allDBstructQueries; // from Generics.php
-		global $allDefPopQueries; // from Generics.php
+		$queries = file_get_contents(__DIR__ . '/../generics/mysql-installer.json');
+		$queries = json_decode($queries, true);
 		
 		Notifications::addLog('========= INSTALLER ==========', 'INSTALLER');
 		
 		Notifications::addLog('---------- DB structure queries ------------', 'INSTALLER');
-		foreach($allDBstructQueries as $query){
+		foreach($queries['allDBstructQueries'] as $query){
 			$this->Exe($query);
 			
 		}
 		
-		if(CHECK_DEF_POP) $this->startTransaction(); // default must be true: when CHECK_DEF_POP is undefined, this is true
+		if(Config::get('checkDefaultPopulation', 'transactions')) $this->startTransaction();
 		
 		Notifications::addLog('---------- DB population queries -----------', 'INSTALLER');
-		foreach($allDefPopQueries as $query){
+		foreach($queries['allDefPopQueries'] as $query){
 			$this->Exe($query);
 		}
+		
+		Hooks::callHooks('postDatabaseReinstallDB', get_defined_vars());
+		
 		Notifications::addLog('========= END OF INSTALLER ==========', 'INSTALLER');
 		
 		$this->closeTransaction('Database successfully reinstalled', true, true, false);
@@ -110,7 +113,7 @@ class Database
 		$result = $this->db_link->query($query);
 		Notifications::addLog($query, 'QUERY');
 
-		if ($this->db_link->error) throw new Exception($this->db_link->error . " in query:" . $query, 500);
+		if ($this->db_link->error) throw new Exception("MYSQL error " . $this->db_link->errno . ": " . $this->db_link->error . " in query:" . $query, 500);
 
 		if ($result === false) return false;
 		elseif ($result === true) return true;
@@ -163,16 +166,21 @@ class Database
 				$newAtomsArray = array_fill(0, count($conceptCols), $newAtomEsc);
 				$allValues = "'".implode("', '", $newAtomsArray)."'";
 				
-				$this->Exe("INSERT INTO `$conceptTable` ($allConceptCols) VALUES ($allValues)");
+				foreach($conceptCols as $col) $str .= ", `$col` = '$newAtomEsc'";
+				$duplicateStatement = substr($str, 1);
 				
-				if(!in_array($concept, $this->affectedConcepts)){
-					$this->affectedConcepts[] = $concept; // add $concept to affected concepts. Needed for conjunct evaluation.
-					Notifications::addLog("Mark concept $concept as affected concept", 'CONJUNCTS');
-				}
+				$this->Exe("INSERT INTO `$conceptTable` ($allConceptCols) VALUES ($allValues)"
+						  ." ON DUPLICATE KEY UPDATE $duplicateStatement");
+				
+				$this->addAffectedConcept($concept); // add concept to affected concepts. Needed for conjunct evaluation.
 				
 				Notifications::addLog("Atom $newAtom added into concept $concept", 'DATABASE');
+				
+				Hooks::callHooks('postDatabaseAddAtomToConceptInsert', get_defined_vars());
 			}else{
 				Notifications::addLog("Atom $newAtom already in concept $concept", 'DATABASE');
+				
+				Hooks::callHooks('postDatabaseAddAtomToConceptSkip', get_defined_vars());
 			}
 			
 			return $newAtom;
@@ -212,10 +220,7 @@ class Database
 			// Perform update
 			$this->Exe("UPDATE \"$conceptTableB\" SET $queryString WHERE \"$anyConceptColForA\" = '$atomEsc'");
 			
-			if(!in_array($conceptB, $this->affectedConcepts)){
-				$this->affectedConcepts[] = $conceptB; // add $concept to affected concepts. Needed for conjunct evaluation.
-				Notifications::addLog("Mark concept $conceptB as affected concept", 'CONJUNCTS');
-			}
+			$this->addAffectedConcept($conceptB); // add concept to affected concepts. Needed for conjunct evaluation.
 			
 			Notifications::addLog("Atom '$atom' added as member to concept '$conceptB'", 'DATABASE');
 		
@@ -256,10 +261,7 @@ class Database
 			
 			$this->Exe("UPDATE \"$conceptTable\" SET $queryString WHERE \"$conceptCol\" = '$atomEsc'");
 			
-			if(!in_array($concept, $this->affectedConcepts)){
-				$this->affectedConcepts[] = $concept; // add $concept to affected concepts. Needed for conjunct evaluation.
-				Notifications::addLog("Mark concept $concept as affected concept", 'CONJUNCTS');
-			}
+			$this->addAffectedConcept($concept); // add concept to affected concepts. Needed for conjunct evaluation.
 			
 			Notifications::addLog("Atom '$atom' removed as member from concept '$concept'", 'DATABASE');
 			
@@ -331,34 +333,41 @@ class Database
 			$tableStableColumnInfo = Relation::getTableColumnInfo($table, $stableCol); // unique=true, null=true
 			$tableModifiedColumnInfo = Relation::getTableColumnInfo($table, $modifiedCol); // unique=true, null=false
 			
-			// If the modified column is unique, we do an update
-			// This is placed first, because of INJ constraints
-			if ($tableModifiedColumnInfo['unique'] && !$tableStableColumnInfo['unique']){
+			/* Complicated code to determine UPDATE or INSERT statement: see Github #169 for explanation */
+			if($tableModifiedColumnInfo['unique'] && $tableStableColumnInfo['unique']){
+				// If both columns are 'unique', we have to check the 'null' possibility
+				if($tableModifiedColumnInfo['null']) $this->Exe("UPDATE `$table` SET `$modifiedCol` = '$modifiedAtomEsc' WHERE `$stableCol` = '$stableAtomEsc'");
+				else $this->Exe("UPDATE `$table` SET `$stableCol` = '$stableAtomEsc' WHERE `$modifiedCol` = '$modifiedAtomEsc'");
+					
+				Hooks::callHooks('postDatabaseUpdate', get_defined_vars());
+			}			
+			elseif ($tableModifiedColumnInfo['unique'] && !$tableStableColumnInfo['unique']){
 			
 				$this->Exe("UPDATE `$table` SET `$stableCol` = '$stableAtomEsc' WHERE `$modifiedCol` = '$modifiedAtomEsc'");
 				
-				foreach ((array)$GLOBALS['hooks']['after_Database_editUpdate_UPDATE'] as $hook) call_user_func($hook, $fullRelationSignature, $stableAtom, $stableConcept, $modifiedAtom, $modifiedConcept, $source);
+				Hooks::callHooks('postDatabaseUpdate', get_defined_vars());
 			}
-			// Elseif the stable column is unique, we do an update // TODO: maybe we can do updates also in non-unique columns
-			elseif ($tableStableColumnInfo['unique']){
+			elseif (!$tableModifiedColumnInfo['unique'] && $tableStableColumnInfo['unique']){
 				
 				$this->Exe("UPDATE `$table` SET `$modifiedCol` = '$modifiedAtomEsc' WHERE `$stableCol` = '$stableAtomEsc'");
 				
-				foreach ((array)$GLOBALS['hooks']['after_Database_editUpdate_UPDATE'] as $hook) call_user_func($hook, $fullRelationSignature, $stableAtom, $stableConcept, $modifiedAtom, $modifiedConcept, $source);
+				Hooks::callHooks('postDatabaseUpdate', get_defined_vars());
 			// Otherwise, binary table, so perform a insert.
 			}else{
 				$this->Exe("INSERT INTO `$table` (`$stableCol`, `$modifiedCol`) VALUES ('$stableAtomEsc', '$modifiedAtomEsc')");
 				
-				foreach ((array)$GLOBALS['hooks']['after_Database_editUpdate_INSERT'] as $hook) call_user_func($hook, $fullRelationSignature, $stableAtom, $stableConcept, $modifiedAtom, $modifiedConcept, $source);
+				Hooks::callHooks('postDatabaseInsert', get_defined_vars());
 				
 				// If $originalAtom is provided, delete tuple rel(stableAtom, originalAtom)
-				if (!is_null($originalAtom)) $this->Exe("DELETE FROM `$table` WHERE `$stableCol` = '$stableAtomEsc' AND `$modifiedCol` = '$originalAtomEsc'");			
+				if (!is_null($originalAtom)) {
+					$modifiedAtom = $originalAtom;
+					$modifiedAtomEsc = $originalAtomEsc;
+					$this->Exe("DELETE FROM `$table` WHERE `$stableCol` = '$stableAtomEsc' AND `$modifiedCol` = '$modifiedAtomEsc'");
+					Hooks::callHooks('postDatabaseDelete', get_defined_vars());
+				}
 			}
 			
-			if(!in_array($fullRelationSignature, $this->affectedRelations)) {
-				$this->affectedRelations[] = $fullRelationSignature; // add $fullRelationSignature to affected relations. Needed for conjunct evaluation.
-				Notifications::addLog("Mark relation $fullRelationSignature as affected relation", 'CONJUNCTS');
-			}
+			$this->addAffectedRelations($fullRelationSignature); // add relation to affected relations. Needed for conjunct evaluation.
 	
 		}catch(Exception $e){
 			// Catch exception and continue script
@@ -406,27 +415,20 @@ class Database
 			// If the modifiedCol can be set to null, we do an update
 			if ($tableModifiedColumnInfo['null']){
 				$this->Exe("UPDATE `$table` SET `$modifiedCol` = NULL WHERE `$stableCol` = '$stableAtomEsc' AND `$modifiedCol` = '$modifiedAtomEsc'");
-				
-				foreach ((array)$GLOBALS['hooks']['after_Database_editDelete_UPDATE'] as $hook) call_user_func($hook, $fullRelationSignature, $stableAtom, $stableConcept, $modifiedAtom, $modifiedConcept, $source);
 			
 			// Elseif the stableCol can be set to null, we do an update
 			}elseif ($tableStableColumnInfo['null']){
-				
 				$this->Exe("UPDATE `$table` SET `$stableCol` = NULL WHERE `$stableCol` = '$stableAtomEsc' AND `$modifiedCol` = '$modifiedAtomEsc'");
-				
-				foreach ((array)$GLOBALS['hooks']['after_Database_editDelete_UPDATE'] as $hook) call_user_func($hook, $fullRelationSignature, $stableAtom, $stableConcept, $modifiedAtom, $modifiedConcept, $source);
 			
 			// Otherwise, binary table, so perform a delete
 			}else{
 				$this->Exe("DELETE FROM `$table` WHERE `$stableCol` = '$stableAtomEsc' AND `$modifiedCol` = '$modifiedAtomEsc'");
 				
-				foreach ((array)$GLOBALS['hooks']['after_Database_editDelete_DELETE'] as $hook) call_user_func($hook, $fullRelationSignature, $stableAtom, $stableConcept, $modifiedAtom, $modifiedConcept, $source);
 			}
 			
-			if(!in_array($fullRelationSignature, $this->affectedRelations)){
-				Notifications::addLog("Mark relation $fullRelationSignature as affected relation", 'CONJUNCTS');
-				$this->affectedRelations[] = $fullRelationSignature; // add $fullRelationSignature to affected relations. Needed for conjunct evaluation.
-			}
+			$this->addAffectedRelations($fullRelationSignature); // add relation to affected relations. Needed for conjunct evaluation.
+			
+			Hooks::callHooks('postDatabaseDelete', get_defined_vars());
 			
 		}catch(Exception $e){
 			// Catch exception and continue script
@@ -466,12 +468,11 @@ class Database
 				}
 			}
 			
-			if(!in_array($concept->name, $this->affectedConcepts)){
-				Notifications::addLog("Mark concept $concept->name as affected concept", 'CONJUNCTS');
-				$this->affectedConcepts[] = $concept->name; // add $concept to affected concepts. Needed for conjunct evaluation.
-			}
+			$this->addAffectedConcept($concept->name); // add concept to affected concepts. Needed for conjunct evaluation.
 			
 			Notifications::addLog("Atom $atom (and all related links) deleted in database", 'DATABASE');
+			
+			Hooks::callHooks('postDatabaseDeleteAtom', get_defined_vars());
 		}catch(Exception $e){
 			// Catch exception and continue script
 			Notifications::addError($e->getMessage());
@@ -485,6 +486,8 @@ class Database
 		$this->Exe("START TRANSACTION"); // start database transaction
 		$this->transaction = rand();
 		
+		Hooks::callHooks('postDatabaseStartTransaction', get_defined_vars());
+		
 	}
 	
 	// TODO: make private function, now also used by in Session class for session atom initiation
@@ -493,12 +496,16 @@ class Database
 		$this->setLatestUpdateTime();
 		$this->Exe("COMMIT"); // commit database transaction
 		unset($this->transaction);
+		
+		Hooks::callHooks('postDatabaseCommitTransaction', get_defined_vars());
 	}
 	
 	private function rollbackTransaction(){
 		Notifications::addLog('------------------------- ROLLBACK -------------------------', 'DATABASE');
 		$this->Exe("ROLLBACK"); // rollback database transaction
 		unset($this->transaction);
+		
+		Hooks::callHooks('postDatabaseRollbackTransaction', get_defined_vars());
 	}
 	
 	/*
@@ -510,9 +517,9 @@ class Database
 	public function closeTransaction($succesMessage = 'Updated', $checkAllConjucts = true, $databaseCommit = false, $setNewContent = true){
 		$session = Session::singleton();
 		
-		Notifications::addLog('========================= CLOSING TRANSACTION =========================', 'DATABASE');
+		Hooks::callHooks('preDatabaseCloseTransaction', get_defined_vars());
 		
-		foreach ((array)$GLOBALS['hooks']['before_Database_transaction_checkInvariantRules'] as $hook) call_user_func($hook);
+		Notifications::addLog('========================= CLOSING TRANSACTION =========================', 'DATABASE');
 		
 		if($checkAllConjucts){
 			Notifications::addLog("Check all conjuncts", 'DATABASE');
@@ -532,8 +539,8 @@ class Database
 			// Evaluate all affected signal conjuncts. Conjuncts are cached
 			RuleEngine::checkConjuncts(RuleEngine::getAffectedSigConjuncts($this->affectedConcepts, $this->affectedRelations), true);
 			
-			// Check only those process rules that are relevant for the current role
-			if(isset($session->role->id)) RuleEngine::checkProcessRules($session->role->id);
+			// Check only those process rules that are relevant for the activate roles
+			RuleEngine::checkProcessRules($session);
 		}
 		
 		unset($this->affectedConcepts, $this->affectedRelations);
@@ -544,7 +551,7 @@ class Database
 		if($invariantRulesHold && $databaseCommit){
 			$this->commitTransaction(); // commit database transaction
 			Notifications::addSuccess($succesMessage);
-		}elseif(defined(COMMIT_INV_VIOLATIONS) && COMMIT_INV_VIOLATIONS){
+		}elseif(Config::get('ignoreInvariantViolations', 'transactions') && COMMIT_INV_VIOLATIONS){
 			$this->commitTransaction();
 			Notifications::addError("Transaction committed with invariant violations");
 		}elseif($invariantRulesHold){
@@ -553,6 +560,8 @@ class Database
 		}else{
 			$this->rollbackTransaction(); // rollback database transaction
 		}
+		
+		Hooks::callHooks('postDatabaseCloseTransaction', get_defined_vars());
 		
 		return $invariantRulesHold;
 		
@@ -575,11 +584,12 @@ class Database
 	public function typeConversion($value, $concept){
 		switch(Concept::getTypeRepresentation($concept)){
 			case "DATE" :
-				$date = new DateTime($value);
-				return $date->format('Y-m-d');
-			case "DATETIME" :
 				$datetime = new DateTime($value);
-				return $datetime->format('Y-m-d H:i:s');
+				return $datetime->format('Y-m-d'); // format to store in database
+			case "DATETIME" :
+				$datetime = new DateTime($value); // $value can include timezone, e.g. 2005-08-15T15:52:01+00:00 (DATE_ATOM format)
+				$datetime->setTimezone(new DateTimeZone('UTC')); // convert to UTC to store in database
+				return $datetime->format('Y-m-d H:i:s'); // format to store in database (UTC)
 			case "INTEGER" :
 				return (int) $value;
 			case "BOOLEAN" :
@@ -591,6 +601,40 @@ class Database
 		}
 		
 	}
+
+// =============================== AFFECTED CONJUNCTS ===========================================================
+	private function addAffectedConcept($conceptName){
+		
+		if(!in_array($conceptName, $this->affectedConcepts) && $this->trackAffectedConjuncts){
+			Notifications::addLog("Mark concept $conceptName as affected concept", 'CONJUNCTS');
+			$this->affectedConcepts[] = $conceptName; // add concept to affected concepts. Needed for conjunct evaluation.
+		}
+		
+	}
+	
+	private function addAffectedRelations($fullRelationSignature){
+	
+		if(!in_array($fullRelationSignature, $this->affectedRelations) && $this->trackAffectedConjuncts){
+			Notifications::addLog("Mark relation $fullRelationSignature as affected relation", 'CONJUNCTS');
+			$this->affectedRelations[] = $fullRelationSignature; // add $fullRelationSignature to affected relations. Needed for conjunct evaluation.
+		}
+	}
+	
+// =============================== GETTERS SETTERS ===========================================================
+	
+	public function getAffectedConcepts(){
+		return $this->affectedConcepts;	
+	}
+	
+	public function getAffectedRelations(){
+		return $this->affectedRelations;
+	}
+	
+	public function setTrackAffectedConjuncts($bool){
+		$this->trackAffectedConjuncts = $bool;
+	}	
+	
+	
 }
 
 

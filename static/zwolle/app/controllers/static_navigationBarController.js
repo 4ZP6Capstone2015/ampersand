@@ -1,22 +1,50 @@
-AmpersandApp.controller('static_navigationBarController', function ($scope, $rootScope, $route, $routeParams, Restangular, $localStorage, $sessionStorage) {
+AmpersandApp.controller('static_navigationBarController', function ($scope, $rootScope, $route, $routeParams, Restangular, $localStorage, $sessionStorage, $timeout) {
 	
 	$scope.$storage = $localStorage;
 	$scope.$sessionStorage = $sessionStorage;
-	$scope.defaultNotificationSettings = {};
+	$scope.defaultSettings = {};
 	
 	$rootScope.loadingNavBar = new Array(); // initialize an array for promises, used by angular-busy module (loading indicator)
 	
 	$rootScope.selectRole = function(roleId){
-		$localStorage.roleId = roleId;
+		$rootScope.toggleRole(roleId, true);
+	};
+	
+	$rootScope.toggleRole = function(roleId, set){
+		angular.forEach($scope.$sessionStorage.sessionRoles, function(role) {
+			if (role.id == roleId) {
+				if(set === undefined){
+					role.active = !role.active;
+				}else{
+					role.active = set;
+				}
+			}
+		});
 		
 		// refresh navbar + notifications
 		$rootScope.refreshNavBar();
 		$rootScope.getNotifications();
-		//$scope.reload();
-	};
+	}
+	
+	$rootScope.deactivateAllRoles = function(){
+		angular.forEach($scope.$sessionStorage.sessionRoles, function(role) {
+			role.active = false;
+		});
+		$rootScope.refreshNavBar();
+	}
+	
+	$rootScope.getActiveRoleIds = function(){
+		var roleIds = [];
+		angular.forEach($scope.sessionStorage.sessionRoles, function(role) {
+			if (role.active == true) {
+				roleIds.push(role.id);
+			}
+		});
+		return roleIds;
+	}
 	
 	$rootScope.selectRoleByLabel = function (roleLabel){
-		angular.forEach($scope.navbar.roles, function(role) {
+		angular.forEach($scope.sessionStorage.sessionRoles, function(role) {
 			if(role.label == roleLabel){
 				$rootScope.selectRole(role.id);
 				return;
@@ -35,13 +63,23 @@ AmpersandApp.controller('static_navigationBarController', function ($scope, $roo
 				.then(function(data){
 					$rootScope.navbar = data;
 					$scope.$sessionStorage.session = data.session;
+					$scope.$sessionStorage.sessionRoles = data.sessionRoles;
 					$scope.$sessionStorage.sessionVars = data.sessionVars;
 					
-					$scope.defaultNotificationSettings = data.defaultSettings.notifications;
+					$scope.defaultSettings = data.defaultSettings;
 					
-					// Default preferences for notifications
+					// Default settings for notificationPrefs
 					if($scope.$storage.notificationPrefs === undefined){
 						$scope.resetNotificationSettings();
+					}
+					// Default setting for switchAutoCommit
+					if($scope.$storage.switchAutoCommit === undefined){
+						$scope.resetSwitchAutoCommit();
+					}
+					
+					// Default setting for cacheGetCalls
+					if($scope.$storage.cacheGetCalls === undefined){
+						$scope.$storage.cacheGetCalls = $scope.defaultSettings.cacheGetCalls;
 					}
 				}, function(error){
 					// on error
@@ -54,8 +92,8 @@ AmpersandApp.controller('static_navigationBarController', function ($scope, $roo
 		session.remove().then(function(data){
 			$rootScope.updateNotifications(data.notifications);
 			
-			// set roleId back to 0
-			$scope.selectRole(0);
+			// deactivate roles
+			$rootScope.deactivateAllRoles();
 			
 		});
 	};
@@ -64,26 +102,34 @@ AmpersandApp.controller('static_navigationBarController', function ($scope, $roo
 		$route.reload();
 	};
 	
-	$scope.resetNotificationSettings = function(){
-		$scope.$storage.notificationPrefs = $.extend($scope.$storage.notificationPrefs, $scope.defaultNotificationSettings);
-		$scope.switchDefaultSettings = true;
+	$scope.resetSettings = function(){
+		// all off
+		$scope.$storage.switchAutoCommit = false;
+		$.each($scope.$storage.notificationPrefs, function(index, value){ $scope.$storage.notificationPrefs[index] = false });
+		
+		$timeout(function() {
+			// reset to default		
+			$scope.resetNotificationSettings();
+			$scope.resetSwitchAutoCommit();
+		}, 500);
 	};
 	
-	$scope.$watch('switchDefaultSettings', function(){
-		if($scope.switchDefaultSettings == true) $scope.resetNotificationSettings();
+	$scope.resetNotificationSettings = function(){
+		$scope.$storage.notificationPrefs = $.extend($scope.$storage.notificationPrefs, $scope.defaultSettings.notifications);
+	};
+	
+	$scope.resetSwitchAutoCommit = function(){
+		$scope.$storage.switchAutoCommit = $scope.defaultSettings.switchAutoCommit;
+	};
+	
+	// Set request type based upon switchAutoCommit
+	$rootScope.defaultRequestType = $scope.$storage.switchAutoCommit ? 'promise' : 'feedback';
+	$scope.$watch('$storage.switchAutoCommit', function() {
+		$rootScope.defaultRequestType = $scope.$storage.switchAutoCommit ? 'promise' : 'feedback';
 	});
 	
-	$scope.$watchCollection('$storage.notificationPrefs', function() {
-		var isDefault = true;
-		if($scope.$storage.notificationPrefs.switchShowViolations != $scope.defaultNotificationSettings.switchShowViolations) isDefault = false;
-		if($scope.$storage.notificationPrefs.switchShowSuccesses != $scope.defaultNotificationSettings.switchShowSuccesses) isDefault = false;
-		if($scope.$storage.notificationPrefs.switchAutoHideSuccesses != $scope.defaultNotificationSettings.switchAutoHideSuccesses) isDefault = false;
-		if($scope.$storage.notificationPrefs.switchShowErrors != $scope.defaultNotificationSettings.switchShowErrors) isDefault = false;
-		if($scope.$storage.notificationPrefs.switchShowInvariants != $scope.defaultNotificationSettings.switchShowInvariants) isDefault = false;
-		if($scope.$storage.notificationPrefs.switchShowInfos != $scope.defaultNotificationSettings.switchShowInfos) isDefault = false;
-		
-		if(!isDefault) $scope.switchDefaultSettings = false;
-		else $scope.switchDefaultSettings = true;
+	$scope.$watch('$storage.cacheGetCalls', function() {
+		Restangular.setDefaultHttpFields({cache: $scope.$storage.cacheGetCalls });
 	});
 	
 	$rootScope.refreshNavBar(); // initialize navbar

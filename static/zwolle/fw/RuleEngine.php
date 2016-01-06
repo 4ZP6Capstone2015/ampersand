@@ -7,6 +7,13 @@ class RuleEngine {
 	 */
 	static $conjunctViolations = array();
 	
+	/*
+	 * variables to store rules that are included from rules.json
+	 */
+	static $allInvariantRules = null;
+	static $allProcessRules = null;
+	static $allRules = null; // associative (using 'name') merge of $allInvariantRules and $allProcessRules
+	
 	/* 
 	 * $cacheConjuncts
 	 * 		true: chache conjuncts
@@ -14,24 +21,20 @@ class RuleEngine {
 	 * 		default: true
 	 */
 	// TODO: function can be made simpler.
-	public static function checkProcessRules($roleId = null, $cacheConjuncts = true){
-		foreach ((array)$GLOBALS['hooks']['before_RuleEngine_checkProcessRules'] as $hook) call_user_func($hook); // Hook functions
+	public static function checkProcessRules($session = null, $cacheConjuncts = true){
 		
-		if(!is_null($roleId)){
-			$role = new Role($roleId);
+		if(!is_null($session)){
 			
-			Notifications::addLog("------------------------- CHECKING PROCESS RULES (for role $role->name) -------------------------", 'RuleEngine');
-			foreach ($role->maintains as $ruleName){
+			Notifications::addLog("-- Checking process rules maintained by active roles --", 'RuleEngine');
+			foreach ($session->rulesToMaintain as $ruleName){
 				$rule = RuleEngine::getRule($ruleName);
 				
 				$violations = RuleEngine::checkRule($rule, $cacheConjuncts);
 				foreach ((array)$violations as $violation) Notifications::addViolation($rule, $violation['src'], $violation['tgt']);
 			}
 		}else{
-			Notifications::addLog("------------------------- CHECKING ALL PROCESS RULES -------------------------", 'RuleEngine');
-			foreach(RuleEngine::getAllProcessRuleNames() as $ruleName){
-				$rule = RuleEngine::getRule($ruleName);
-				
+			Notifications::addLog("-- Checking ALL process rules --", 'RuleEngine');
+			foreach(RuleEngine::getAllProcessRules() as $rule){				
 				$violations = RuleEngine::checkRule($rule, $cacheConjuncts);
 				foreach ((array)$violations as $violation) Notifications::addViolation($rule, $violation['src'], $violation['tgt']);;
 			}
@@ -46,9 +49,7 @@ class RuleEngine {
 	 * 		default: true
 	 */
 	public static function checkInvariantRules($invariantConjuctsIds = null, $cacheConjuncts = true){		
-		$invariantRulesHold = true; // default
-		
-		foreach ((array)$GLOBALS['hooks']['before_RuleEngine_checkInvariantRules'] as $hook) call_user_func($hook); // Hook functions 
+		$invariantRulesHold = true; // default 
 		
 		// check invariant rules
 		Notifications::addLog('------------------------- CHECKING INVARIANT RULES -------------------------', 'RuleEngine');
@@ -74,9 +75,7 @@ class RuleEngine {
 		// Otherwise check all invariantConjuncts
 		}else{
 			Notifications::addLog("Checking all invariant rules", 'RuleEngine');
-			foreach (RuleEngine::getAllInvariantRulesNames() as $ruleName){
-				$rule = RuleEngine::getRule($ruleName);
-			
+			foreach (RuleEngine::getAllInvariantRules() as $rule){			
 				$violations = RuleEngine::checkRule($rule, $cacheConjuncts);
 				
 				foreach ((array)$violations as $violation){
@@ -132,11 +131,11 @@ class RuleEngine {
 	
 	/*
 	 * $cacheConjuncts
-	 * 		true: chache conjuncts, i.e. store them locally in self::$conjunctViolations and, if there are violations, in the database table `__all_signals__`
+	 * 		true: chache conjuncts, i.e. store them locally in self::$conjunctViolations and, if there are violations, in the database
 	 * 		false: don't cache conjuncts (is used by ExecEngine)
 	 * 		default: true
 	 */
-	private static function checkConjunct($conjunctId, $cacheConjuncts = true){
+	public static function checkConjunct($conjunctId, $cacheConjuncts = true){
 		Notifications::addLog("Checking conjunct '" . $conjunctId."' cache:".var_export($cacheConjuncts, true), 'RuleEngine');
 		try{
 			
@@ -148,6 +147,7 @@ class RuleEngine {
 			// Otherwise evaluate conjunct, cache and return violations
 			}else{
 				$db = Database::singleton();
+				$dbsignalTableName = Config::get('dbsignalTableName', 'mysqlDatabase');
 				$violations = array();
 				
 				// Evaluate conjunct
@@ -162,18 +162,18 @@ class RuleEngine {
 					Notifications::addLog("Conjunct '".$conjunctId."' holds", 'RuleEngine');
 					
 					// Remove "old" conjunct violations from database
-					$query = "DELETE FROM `__all_signals__` WHERE `conjId` = '$conjunctId'";
+					$query = "DELETE FROM `$dbsignalTableName` WHERE `conjId` = '$conjunctId'";
 					$db->Exe($query);
 					
 				}elseif($cacheConjuncts){
 					Notifications::addLog("Conjunct '".$conjunctId."' broken, caching violations in database", 'RuleEngine');
 					
 					// Remove "old" conjunct violations from database
-					$query = "DELETE FROM `__all_signals__` WHERE `conjId` = '$conjunctId'";
+					$query = "DELETE FROM `$dbsignalTableName` WHERE `conjId` = '$conjunctId'";
 					$db->Exe($query);
 					
-					// Add new conjunct violation to database table __all_signals__
-					$query = "INSERT IGNORE INTO `__all_signals__` (`conjId`, `src`, `tgt`) VALUES ";
+					// Add new conjunct violation to database
+					$query = "INSERT IGNORE INTO `$dbsignalTableName` (`conjId`, `src`, `tgt`) VALUES ";
 					foreach ($violations as $violation) $values[] = "('".$conjunctId."', '".$violation['src']."', '".$violation['tgt']."')";
 					$query .= implode(',', $values);
 					$db->Exe($query);
@@ -191,6 +191,7 @@ class RuleEngine {
 	
 	public static function getSignalsFromDB($conjunctIds){
 		$db = Database::singleton();
+		$dbsignalTableName = Config::get('dbsignalTableName', 'mysqlDatabase');
 		
 		$result = array();
 		
@@ -198,19 +199,46 @@ class RuleEngine {
 		
 		if (count($conjunctIds) > 0) {
 			// TODO: DB Query can be changed to WHERE `conjId` IN (<conjId1>, <conjId2>, etc)
-			$query = "SELECT * FROM `__all_signals__` WHERE " . implode(' OR ', array_map( function($conjunctId) {return "`conjId` = '$conjunctId'";}, $conjunctIds));
+			$query = "SELECT * FROM `$dbsignalTableName` WHERE " . implode(' OR ', array_map( function($conjunctId) {return "`conjId` = '$conjunctId'";}, $conjunctIds));
 			$result = $db->Exe($query);
 		} else {
-			Notifications::addInfo("No conjunctIds provided (can be that this role does not maintain any rule)");
+			Notifications::addLog("No conjuncts to check (it can be that this role does not maintain any rule)", 'RuleEngine');
 		}
 		
 		return $result;
 		
 	}
 	
+	public static function getAllRules(){
+		if(is_null(self::$allRules)){
+			$rules = file_get_contents(__DIR__ . '/../generics/rules.json');
+			$rules = json_decode($rules, true);
+			
+			self::$allInvariantRules = (array)$rules['invariants'];
+			self::$allProcessRules = (array)$rules['signals'];
+			
+			$allRules = array();
+			foreach (array_merge((array)$rules['invariants'], (array)$rules['signals']) as $r) $allRules[$r['name']] = $r; 
+			self::$allRules = $allRules;
+		}
+		
+		return self::$allRules;
+	}
+	
+	public static function getAllInvariantRules(){
+		RuleEngine::getAllRules();
+	
+		return self::$allInvariantRules;
+	}
+	
+	public static function getAllProcessRules(){
+		RuleEngine::getAllRules();
+	
+		return self::$allProcessRules;
+	}
+	
 	public static function getRule($ruleName){
-		// from Generics.php
-		global $allRules;
+		$allRules = RuleEngine::getAllRules();
 
 		if(!array_key_exists($ruleName, $allRules)) throw new Exception("Rule \'$ruleName\' does not exists in allRules", 500);
 		
@@ -224,7 +252,7 @@ class RuleEngine {
 		Notifications::addLog('Creating violation message', 'RuleEngine');
 		$pairStrs = array();
 		$interfaceIds = array();
-		foreach ($pairView as $segment){
+		foreach ((array)$pairView as $segment){
 			// interface segment
 			if ($segment['segmentType'] == 'Ifc'){
 				$interfaceIds = explode(';', $segment['Interfaces']);
@@ -299,43 +327,21 @@ class RuleEngine {
 		return array_unique($affectedConjuncts); // remove duplicate entries.
 	}
 	
-	
-	/*
-	 * This function returns all InvariantRulesNames. Currently there is no such array in Generics.php.
-	 * Therefore this function finds all the processRuleNames (as provided by the $allRoles array) and
-	 * selects those rules from $allRules, that are not processRules (a rule is either a processRule or 
-	 * an invariantRule, but not both).
-	 * 
-	 * TODO: 
-	 */
-	public static function getAllInvariantRulesNames(){
-		global $allRules; // from Generics.php
-		$allRoles = Role::getAllRoles();
-				
-		// list of all process rules
-		$processRuleNames = array();
-		foreach($allRoles as $role){
-			$processRuleNames = array_merge($processRuleNames, $role['ruleNames']);
+	public static function getProcessViolationsFromDB($session){		
+		$conjunctIds = array();
+		$conjunctRuleMap = array();
+		foreach ($session->rulesToMaintain as $ruleName){
+			$rule = RuleEngine::getRule($ruleName);
+			foreach($rule['conjunctIds'] as $conjunctId) $conjunctRuleMap[$conjunctId][] = $ruleName;
+			$conjunctIds = array_merge($conjunctIds, $rule['conjunctIds']);
 		}
+		$signals = RuleEngine::getSignalsFromDB($conjunctIds);
 		
-		// list of all rules
-		$allRuleNames = array_keys($allRules);
-		
-		// return list of all invariant rules (= all rules that are not process rules)
-		return array_diff($allRuleNames, $processRuleNames);
-	}
-	
-	public static function getAllProcessRuleNames(){
-		global $allRules; // from Generics.php
-		$allRoles = Role::getAllRoles();
-		
-		// list of all process rules
-		$processRuleNames = array();
-		foreach($allRoles as $role){
-			$processRuleNames = array_merge($processRuleNames, $role['ruleNames']);
+		foreach ($signals as $signal){ // $signal[] = array('conjId' => , 'src' => , 'tgt' => )
+			foreach($conjunctRuleMap[$signal['conjId']] as $ruleName){
+				Notifications::addViolation(RuleEngine::getRule($ruleName), $signal['src'], $signal['tgt']);
+			}
 		}
-		
-		return $processRuleNames;
 	}
 
 }

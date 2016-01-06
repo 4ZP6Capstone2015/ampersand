@@ -10,9 +10,6 @@ import Data.List
 import qualified Data.Map as Map
 import Control.Monad.State.Lazy  (State, gets, evalState, modify)
 
-fatal :: Int -> String -> a
-fatal = fatalMsg "FSpec.GenerateUML"
-
 -- TODO: escape
 -- TODO: names of model, package, assoc (empty?), etc.
 
@@ -82,9 +79,9 @@ fSpec2UML fSpec =
                , " </xmi:Extension>"
                , "</xmi:XMI>" ]
     }
- where classDiag = cdAnalysis fSpec
-       contextName = cdName classDiag
-       allConcs = ooCpts classDiag
+ where classDiag     = cdAnalysis fSpec
+       contextName   = cdName classDiag
+       allConcs      = ooCpts classDiag
        classNames    = map name (classes classDiag)
        datatypeNames = map name allConcs >- classNames
 

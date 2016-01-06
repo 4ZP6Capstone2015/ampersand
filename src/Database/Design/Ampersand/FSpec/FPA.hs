@@ -8,9 +8,6 @@ import Database.Design.Ampersand.FSpec.FSpec
 import Database.Design.Ampersand.Basics
 import Data.Maybe
 
---fatal :: Int -> String -> a
---fatal = fatalMsg "FSpec.FPA"
-
 data FPA = FPA { dataModelFPA :: ([FP], Int), userTransactionFPA :: ([FP],Int) } deriving Show
 
 -- NOTE: FPA constructors are in Dutch (so 'output function' is not OF, but UF)   
@@ -56,7 +53,7 @@ fpaDataModel :: FSpec -> [FP]
 fpaDataModel fSpec = mapMaybe fpaPlugInfo $ plugInfos fSpec
 
 fpaPlugInfo :: PlugInfo -> Maybe FP
-fpaPlugInfo p@(InternalPlug (TblSQL{fields=flds})) | Just cmplxty <- ilgvComplexity $ length flds =
+fpaPlugInfo p@(InternalPlug (TblSQL{attributes=atts})) | Just cmplxty <- ilgvComplexity $ length atts =
   Just $ FP ILGV (name p) cmplxty
   where ilgvComplexity :: Int -> Maybe Complexity
         ilgvComplexity n | n <= 2    = Nothing 

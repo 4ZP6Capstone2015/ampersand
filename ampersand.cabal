@@ -1,5 +1,5 @@
 name:           ampersand
-version:        3.2.0
+version:        3.3.0
 author:         Stef Joosten
 maintainer:     stef.joosten@ou.nl
 synopsis:       Toolsuite for automated design of business processes.
@@ -7,8 +7,8 @@ description:    You can define your business processes by means of rules, writte
 homepage:       http://wiki.tarski.nl
 category:       Database Design
 stability:      alpha
-cabal-version:  >= 1.10
-tested-with:    GHC == 7.8.3
+cabal-version:  >= 1.22
+tested-with:    GHC == 7.10.3
 build-type:     Custom
 license:        GPL
 license-file:   LICENSE
@@ -16,7 +16,7 @@ copyright:      Stef Joosten
 bug-reports:    https://github.com/AmpersandTarski/ampersand/issues
 -- Recursive patterns such as static/* are not allowed in data-files. Hence we cannot use them for static files, as
 -- we would need to specify a pattern for each extension in each subdirectory.
-data-files:     
+data-files:
                 LICENSE
 
 source-repository head
@@ -28,47 +28,36 @@ executable ampersand
   main-is:           Main.hs
   hs-source-dirs:    src
   default-language:  Haskell2010
+  default-extensions:NamedFieldPuns, RecordWildCards
   ghc-options:       -rtsopts -Wall
-  build-depends:     
-    SpreadsheetML == 0.1.*,
-    base >= 4.7 && < 5.0,
-    bytestring == 0.10.*,
-    containers == 0.5.*,
-    csv == 0.1.*,
-    graphviz >= 2999.17.0,
-    hashable == 1.2.*,
-    old-locale == 1.0.*,
-    old-time == 1.1.*,
-    pandoc >= 1.13,
-    pandoc-types == 1.12.*,
-    parsec == 3.1.*,
-    process == 1.2.*,
-    simple-sql-parser >=0.4.1 && <0.5,
-    split == 0.2.*,
-    utf8-string >= 0.3,
-    text >=1.1 && <1.3,
-    xlsx == 0.1.*,
-    data-default,
-    zlib,
-    lens,
-    MissingH,
-    wl-pprint
-  if impl(ghc <= 7.8.4)  
-    build-depends: 
-      time == 1.4.*, 
-      HStringTemplate == 0.7.*,
-      mtl == 2.1.*,
-      directory == 1.2.*,
-      filepath == 1.3.*
-  else 
-  -- 7.10 or later
-    build-depends: 
-      time >= 1.5, 
-      HStringTemplate >= 0.7.0,
-      mtl >= 2.1.0,
-      directory >= 1.2.0.0,
-      filepath >= 1.3.0
-  other-modules:     
+  build-depends:     aeson == 0.8.*,
+                     aeson-pretty == 0.7.*,
+                     base >= 4.7 && < 5.0,
+                     bytestring == 0.10.*,
+                     containers == 0.5.*,
+                     csv == 0.1.*,
+                     data-default >=0.5 && <0.6,
+                     directory == 1.2.*,
+                     filepath == 1.4.*,
+                     graphviz == 2999.18.*,
+                     hashable == 1.2.*,
+                     HStringTemplate == 0.8.*,
+                     lens == 4.12.*,
+                     mtl == 2.2.*,
+                     pandoc >= 1.15.0.6 && == 1.15.*,
+                     pandoc-types == 1.12.*,
+                     parsec == 3.1.*,
+                     process == 1.2.*,
+                     simple-sql-parser == 0.4.1,
+                     split == 0.2.*,
+                     SpreadsheetML ==0.1.*,
+                     text == 1.2.*,
+                     time == 1.5.*,
+                     utf8-string == 1.0.*,
+                     xlsx == 0.2.*,
+                     zlib == 0.5.*
+
+  other-modules:
                      Database.Design.Ampersand,
                      Database.Design.Ampersand.ADL1,
                      Database.Design.Ampersand.ADL1.Disambiguate,
@@ -83,14 +72,15 @@ executable ampersand
                      Database.Design.Ampersand.Basics.BuildInfo_Generated,
                      Database.Design.Ampersand.Basics.Collection,
                      Database.Design.Ampersand.Basics.String,
-                     Database.Design.Ampersand.Basics.Unique,
                      Database.Design.Ampersand.Basics.UTF8,
+                     Database.Design.Ampersand.Basics.Unique,
                      Database.Design.Ampersand.Basics.Version,
                      Database.Design.Ampersand.Classes,
                      Database.Design.Ampersand.Classes.ConceptStructure,
                      Database.Design.Ampersand.Classes.Relational,
                      Database.Design.Ampersand.Classes.ViewPoint,
                      Database.Design.Ampersand.Components,
+                     Database.Design.Ampersand.Core.A2P_Converters,
                      Database.Design.Ampersand.Core.AbstractSyntaxTree,
                      Database.Design.Ampersand.Core.ParseTree,
                      Database.Design.Ampersand.Core.Poset,
@@ -105,6 +95,7 @@ executable ampersand
                      Database.Design.Ampersand.FSpec.GenerateUML,
                      Database.Design.Ampersand.FSpec.Motivations,
                      Database.Design.Ampersand.FSpec.Plug,
+                     Database.Design.Ampersand.FSpec.SQL,
                      Database.Design.Ampersand.FSpec.ShowADL,
                      Database.Design.Ampersand.FSpec.ShowECA,
                      Database.Design.Ampersand.FSpec.ShowHS,
@@ -143,6 +134,8 @@ executable ampersand
                      Database.Design.Ampersand.Output.Population2Xlsx,
                      Database.Design.Ampersand.Output.PredLogic,
                      Database.Design.Ampersand.Output.Statistics,
+                     Database.Design.Ampersand.Output.ToJSON.JSONutils,
+                     Database.Design.Ampersand.Output.ToJSON.ToJson,
                      Database.Design.Ampersand.Output.ToPandoc.ChapterConceptualAnalysis,
                      Database.Design.Ampersand.Output.ToPandoc.ChapterDataAnalysis,
                      Database.Design.Ampersand.Output.ToPandoc.ChapterDiagnosis,
@@ -155,10 +148,9 @@ executable ampersand
                      Database.Design.Ampersand.Output.ToPandoc.ChapterProcessAnalysis,
                      Database.Design.Ampersand.Output.ToPandoc.ChapterSoftwareMetrics,
                      Database.Design.Ampersand.Output.ToPandoc.SharedAmongChapters,
-                     Database.Design.Ampersand.Prototype.CoreImporter,
                      Database.Design.Ampersand.Prototype.GenBericht,
-                     Database.Design.Ampersand.Prototype.Generate,
                      Database.Design.Ampersand.Prototype.GenFrontend,
+                     Database.Design.Ampersand.Prototype.Generate,
                      Database.Design.Ampersand.Prototype.Installer,
                      Database.Design.Ampersand.Prototype.ObjBinGen,
                      Database.Design.Ampersand.Prototype.PHP,
@@ -166,7 +158,14 @@ executable ampersand
                      Database.Design.Ampersand.Prototype.ValidateEdit,
                      Database.Design.Ampersand.Prototype.ValidateSQL,
                      Paths_ampersand,
-                     Database.Design.Ampersand.Core.A2P_Converters
+                     Database.Design.Ampersand.Output.ToJSON.MySQLInstaller,
+                     Database.Design.Ampersand.Output.ToJSON.Settings,
+                     Database.Design.Ampersand.Output.ToJSON.Relations,
+                     Database.Design.Ampersand.Output.ToJSON.Rules,
+                     Database.Design.Ampersand.Output.ToJSON.Concepts,
+                     Database.Design.Ampersand.Output.ToJSON.Conjuncts,
+                     Database.Design.Ampersand.Output.ToJSON.Interfaces,
+                     Database.Design.Ampersand.Output.ToJSON.Others
 
 
 Test-Suite ampersand-test
@@ -175,33 +174,30 @@ Test-Suite ampersand-test
   hs-source-dirs:    src
   default-language:  Haskell2010
   ghc-options:       -fhpc -with-rtsopts=-M1536m -Wall
-  build-depends:     
-                     base,
-                     bytestring >=0.10 && <0.11,
-                     containers >=0.5 && <0.6,
-                     directory >=1.2 && <1.3,
-                     hashable >=1.2 && <1.3,
-                     filepath,
-                     MissingH,
-                     mtl >=2.1 && <2.2,
-                     old-locale == 1.0.*,
-                     pandoc,
-                     pandoc-types,
-                     parsec >=3.1 && <3.2,
+  build-depends:     base >= 4.7 && < 5.0,
+                     bytestring == 0.10.*,
+                     conduit == 1.2.*,
+                     containers == 0.5.*,
+                     data-default >=0.5 && <0.6,
+                     directory == 1.2.*,
+                     filepath == 1.4.*,
+                     hashable == 1.2.*,
+                     lens == 4.12.*,
+                     MissingH == 1.3.*,
+                     mtl == 2.2.*,
+                     pandoc >= 1.15.0.6 && == 1.15.*,
+                     pandoc-types == 1.12.*,
+                     parsec == 3.1.*,
                      QuickCheck == 2.8.*,
-                     text >=1.1 && <1.2,
-                     time >=1.4 && <1.5,
-                     simple-sql-parser,
-                     utf8-string,
-                     wl-pprint,
-                     transformers >=0.3 && <0.4,
-                     conduit >=1.2 && <1.3,
-                     xlsx == 0.1.*,
-                     zlib,
-                     lens,
-                     data-default >=0.5 && <0.6
-
-  other-modules:     
+                     simple-sql-parser == 0.4.1,
+                     text == 1.2.*,
+                     time == 1.5.*,
+                     transformers == 0.4.*,
+                     utf8-string == 1.0.*,
+                     wl-pprint == 1.2.*,
+                     xlsx == 0.2.*,
+                     zlib == 0.5.*
+  other-modules:
                      Database.Design.Ampersand.Misc.Options,
                      Database.Design.Ampersand.Test.Parser.ArbitraryPandoc,
                      Database.Design.Ampersand.Test.Parser.ArbitraryTree,
@@ -213,4 +209,12 @@ Test-Suite ampersand-test
                      Database.Design.Ampersand.Output.Population2Xlsx,
                      Database.Design.Ampersand.Graphic.ClassDiag2Dot,
                      Database.Design.Ampersand.Graphic.Fspec2ClassDiagrams,
-                     Database.Design.Ampersand.Core.A2P_Converters
+                     Database.Design.Ampersand.Core.A2P_Converters,
+                     Database.Design.Ampersand.Output.ToJSON.MySQLInstaller,
+                     Database.Design.Ampersand.Output.ToJSON.Settings,
+                     Database.Design.Ampersand.Output.ToJSON.Relations,
+                     Database.Design.Ampersand.Output.ToJSON.Rules,
+                     Database.Design.Ampersand.Output.ToJSON.Concepts,
+                     Database.Design.Ampersand.Output.ToJSON.Conjuncts,
+                     Database.Design.Ampersand.Output.ToJSON.Interfaces,
+                     Database.Design.Ampersand.Output.ToJSON.Others

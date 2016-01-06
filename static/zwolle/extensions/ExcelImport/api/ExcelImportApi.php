@@ -13,12 +13,12 @@ class ExcelImportApi{
 		try{
 			$session = Session::singleton();
 			
-			$allowedRoles = (array)Config::get('allowedRolesForExcelImport','excelImport');
-			if(LOGIN_ENABLED && !is_null($allowedRoles)){
+			// Check sessionRoles if allowedRolesForExcelImport is specified
+			$allowedRoles = Config::get('allowedRolesForExcelImport','excelImport');
+			if(!is_null($allowedRoles)){
 				$ok = false;
 			
-				$sessionRoles = Role::getAllSessionRoles(session_id());
-				foreach($sessionRoles as $role){
+				foreach($session->getSessionRoles() as $role){
 					if(in_array($role->label, $allowedRoles)) $ok = true;
 				}
 				if(!$ok) throw new Exception("You do not have access to import excel files", 401);

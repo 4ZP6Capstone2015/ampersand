@@ -4,7 +4,6 @@ module Database.Design.Ampersand.Test.Parser.ArbitraryTree () where
 
 import Test.QuickCheck
 import Data.Char
-import Control.Applicative
 import Data.List (nub)
 import Database.Design.Ampersand.Core.ParseTree
 import Database.Design.Ampersand.Input.ADL1.Lexer (keywords)
@@ -63,7 +62,6 @@ makeObj genPrim ifcGen genView n =
         P_Obj <$> lowerId  <*> arbitrary <*> term <*> arbitrary <*> genView <*> ifc <*> args
               where args = listOf $ listOf1 identifier
                     term = Prim <$> genPrim
-                    crud = suchThatMaybe (sublistOf "CRUDX")(notElem 'X')
                     ifc  = if n == 0 then return Nothing
                            else Just <$> ifcGen (n`div`2)
 
@@ -72,7 +70,7 @@ genIfc = subIfc genObj
 
 subIfc :: (Int -> Gen (P_ObjDef a)) -> Int -> Gen (P_SubIfc a)
 subIfc objGen n =
-    if n == 0 then P_InterfaceRef <$> arbitrary <*> arbitrary <*> safeStr1
+    if n == 0 then P_InterfaceRef <$> arbitrary <*> arbitrary <*> safeStr1 <*> arbitrary
     else P_Box          <$> arbitrary <*> boxKey   <*> vectorOf n (objGen$ n`div`2)
     where boxKey = elements [Nothing, Just "ROWS", Just "COLS", Just "TABS"]
 
@@ -125,15 +123,15 @@ instance Arbitrary P_RoleRule where
 instance Arbitrary Representation where
     arbitrary = Repr <$> arbitrary <*> listOf1 upperId <*> arbitrary
 
-instance Arbitrary TType where -- Not allowed are:  [ Object , TypeOfOne] 
+instance Arbitrary TType where -- Not allowed are:  [ Object , TypeOfOne]
     arbitrary = elements [Alphanumeric, BigAlphanumeric, HugeAlphanumeric, Password
-                         , Binary, BigBinary, HugeBinary 
-                         , Date, DateTime 
+                         , Binary, BigBinary, HugeBinary
+                         , Date, DateTime
                          , Boolean, Integer, Float
                          ]
 
 instance Arbitrary Role where
-    arbitrary = 
+    arbitrary =
       oneof [ Role    <$> safeStr
             , Service <$> safeStr
             ]
@@ -163,10 +161,10 @@ genTerm lv n = if n == 0
                else oneof options
     where gen :: Arbitrary a => Int -> Gen (Term a)
           gen l = genTerm l (n`div`2)
-  
+
           options :: Arbitrary a => [Gen (Term a)]
           options = concat $ drop lv levels
-          
+
           levels :: Arbitrary a => [[Gen (Term a)]]
           levels = [
             -- level 0: pRule
@@ -262,14 +260,14 @@ instance Arbitrary PAtomValue where
        ]
      where stringConstraints :: String -> Bool
            stringConstraints str =
-             case str of 
+             case str of
               [] -> True
-              ('\\':_) -> False -- om van het geneuzel af te zijn. 
+              ('\\':_) -> False -- om van het geneuzel af te zijn.
               ('\'':_) -> False -- This string would cause problems as a Singleton in an Expresson
               ('\\':'\'':cs) -> stringConstraints cs
               ('\\':'"':cs) -> stringConstraints cs
               ('"':_) -> False -- This string would cause problems as a Singleton in an Expresson
-              ['\\']  -> False -- If the last character is an escape, the double quote ending the string would not be seen as such. 
+              ['\\']  -> False -- If the last character is an escape, the double quote ending the string would not be seen as such.
               (_:cs)  -> stringConstraints cs
 instance Arbitrary P_Interface where
     arbitrary = P_Ifc <$> safeStr1 <*> maybeSafeStr

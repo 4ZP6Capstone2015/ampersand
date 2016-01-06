@@ -6,10 +6,6 @@ import Database.Design.Ampersand.Output.ToPandoc.SharedAmongChapters
 import Data.List(nub,partition)
 import Data.Maybe(isJust)
 
-
-fatal :: Int -> String -> a
-fatal = fatalMsg "Output.ToPandoc.ChapterDiagnosis"
-
 chpDiagnosis :: FSpec -> (Blocks,[Picture])
 chpDiagnosis fSpec
  = (  chptHeader (fsLang fSpec) Diagnosis
@@ -146,7 +142,7 @@ chpDiagnosis fSpec
          ccs = concs [ d | d<-vrels fSpec, null (themes fSpec)||decpat d `elem` themes fSpec]  -- restrict if the documentation is partial.
   unusedConceptDefs :: Blocks
   unusedConceptDefs
-   = case [cd | cd <-cDefsInScope fSpec, name cd `notElem` map name (allConcepts fSpec)] of
+   = case [cd | cd <-cDefsInScope fSpec, name cd `notElem` map name (concs fSpec)] of
       []  -> if (null.cDefsInScope) fSpec
              then mempty
              else para.str.l $

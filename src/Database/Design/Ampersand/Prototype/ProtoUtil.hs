@@ -19,9 +19,6 @@ import Database.Design.Ampersand.FSpec
 import Database.Design.Ampersand.Misc.Options (verboseLn) -- TODO: verboseLn shouldn't be in Options
 import qualified Database.Design.Ampersand.Misc.Options as Opts
 
-fatal :: Int -> String -> a
-fatal = fatalMsg "ProtoUtil"
-
 writePrototypeFile :: FSpec -> String -> String -> IO ()
 writePrototypeFile fSpec relFilePath content =
  do { verboseLn (getOpts fSpec) ("  Generating "++relFilePath)
@@ -32,8 +29,8 @@ writePrototypeFile fSpec relFilePath content =
 
 getGenericsDir :: FSpec -> String
 getGenericsDir fSpec = 
-  let protoDir = Opts.dirPrototype (getOpts fSpec)
-  in  if (Opts.newFrontend $ getOpts fSpec) then protoDir </> "generics" else protoDir
+  Opts.dirPrototype (getOpts fSpec) </> "generics" 
+   
 
 -- Copy entire directory tree from srcBase/ to tgtBase/, overwriting existing files, but not emptying existing directories.
 -- NOTE: tgtBase specifies the copied directory target, not its parent

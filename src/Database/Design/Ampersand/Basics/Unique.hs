@@ -1,4 +1,10 @@
 {-# LANGUAGE DeriveDataTypeable #-}
+{- The purpose of class Unique is to identify a Haskell object by means of a string.
+E.g.
+instance Unique Pattern where
+ showUnique = name
+-}
+
 module Database.Design.Ampersand.Basics.Unique 
   (Unique(..),Named(..))
 where
@@ -6,9 +12,6 @@ import Data.Typeable
 import Data.List
 import Data.Char
 import Database.Design.Ampersand.Basics.Version
-
-fatal :: Int -> String -> a
-fatal = fatalMsg "Unique"
 
 -- | anything could have some label, can't it?
 class Named a where
