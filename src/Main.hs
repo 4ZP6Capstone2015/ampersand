@@ -25,12 +25,19 @@ main =
                                   mapM_ putStrLn (intersperse  (replicate 30 '=') (map showErr err))
                                   exitWith $ ExitFailure 10
               Checked fSpec -> do when printName $ printInfoFSPec fSpec 
-                                  generateAmpersandOutput fSpec
-                                  generateProtoStuff      fSpec
+                                  printRuleFSPec fSpec
+                                  printVioFSPec fSpec
 
 printInfoFSPec :: FSpec -> IO ()  
 printInfoFSPec fSpec = do
   putStrLn $ "The name of the specification is " ++ fsName fSpec 
+  putStrLn $ "Output of specification :" ++ rulename fSpec ++'\n' ++ "SQL Rules" validateRulesSQL fSpec
+  putStrLn $ "Violations:" ++ getOpts fSpec ++'\n' ++ "Rule Violated:" ++ grules fSpec ++'\t' ++vrules fSpec
+  putStrLn $"( "++(showVal.apLeft) apr++", "++(showVal.apRight) apr++" )"++"["++intercalate ", " (map showADL aprs)++"]"
+  putStrLn $ "\nContents of rule "++show ruleName++ ": "++showADL (rrexp rule)
+  putStrLn $ "show contents rule: "++showContents rule
+  putStrLn $ "Show val ADL apt Left: "++(show.showValADL.apLeft)++"\nShow ADK vak ap.Right" ++(show.showValADL.apRight++"\nRule Complement"++ruleComplement
+
   
 
 generateProtoStuff :: FSpec -> IO ()
@@ -105,8 +112,8 @@ doGenProto fSpec =
 
        showprs :: [AAtomPair] -> String
        showprs aprs = "["++intercalate ", " (map showADL aprs)++"]"
---       showpr :: AAtomPair -> String
---       showpr apr = "( "++(showVal.apLeft) apr++", "++(showVal.apRight) apr++" )"
+      showpr :: AAtomPair -> String
+	  showpr apr = "( "++(showVal.apLeft) apr++", "++(showVal.apRight) apr++" )"
        reportSignals []        = verboseLn (getOpts fSpec) "No signals for the initial population."
        reportSignals conjViols = verboseLn (getOpts fSpec) $ "Signals for initial population:\n" ++ intercalate "\n"
          [   "Rule(s): "++(show . map name . rc_orgRules) conj
