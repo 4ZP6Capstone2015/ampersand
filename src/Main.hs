@@ -37,6 +37,9 @@ printInfoFSPec fSpec = do
   putStrLn $ "\nContents of rule "++show ruleName++ ": "++showADL (rrexp rule)
   putStrLn $ "show contents rule: "++showContents rule
   putStrLn $ "Show val ADL apt Left: "++(show.showValADL.apLeft)++"\nShow ADK vak ap.Right" ++(show.showValADL.apRight++"\nRule Complement"++ruleComplement
+  putStrLn $ "SQL Table name:"++sqlname++','++"SQL Attribute:"++SqlAttribute++"\nmkkpTbl = make link table?:" ++mLkpTbl++","++"BinSQL plugAttributes:" ++PlugAttributes
+  
+  putStrLn $ "SQL concept table:"++getConceptTableFor
 
   
 
