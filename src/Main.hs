@@ -25,21 +25,43 @@ main =
                                   mapM_ putStrLn (intersperse  (replicate 30 '=') (map showErr err))
                                   exitWith $ ExitFailure 10
               Checked fSpec -> do when printName $ printInfoFSPec fSpec 
-                                  printRuleFSPec fSpec
-                                  printVioFSPec fSpec
+                                  generateAmpersandOutput  fSpec
+                                  generateProtoStuff       fSpec
+
 
 printInfoFSPec :: FSpec -> IO ()  
-printInfoFSPec fSpec = do
-  putStrLn $ "The name of the specification is " ++ fsName fSpec 
-  putStrLn $ "Output of specification :" ++ rulename fSpec ++'\n' ++ "SQL Rules" validateRulesSQL fSpec
-  putStrLn $ "Violations:" ++ getOpts fSpec ++'\n' ++ "Rule Violated:" ++ grules fSpec ++'\t' ++vrules fSpec
-  putStrLn $"( "++(showVal.apLeft) apr++", "++(showVal.apRight) apr++" )"++"["++intercalate ", " (map showADL aprs)++"]"
-  putStrLn $ "\nContents of rule "++show ruleName++ ": "++showADL (rrexp rule)
-  putStrLn $ "show contents rule: "++showContents rule
-  putStrLn $ "Show val ADL apt Left: "++(show.showValADL.apLeft)++"\nShow ADK vak ap.Right" ++(show.showValADL.apRight++"\nRule Complement"++ruleComplement
-  putStrLn $ "SQL Table name:"++sqlname++','++"SQL Attribute:"++SqlAttribute++"\nmkkpTbl = make link table?:" ++mLkpTbl++","++"BinSQL plugAttributes:" ++PlugAttributes
+printInfoFSPec fSpec@FSpec{..} = do
+  putStrLn $ "The name of the specification is " ++ fsName 
+  validatedRules <- validateRulesSQL fSpec 
+  putStrLn $ "Output of specification :" ++ show validatedRules -- ++ rulename ++'\n' ++ "SQL Rules" ++ validatedSQLRules 
+  putStrLn $ "Violations:" ++ show getOpts ++ "\n" ++ "Rule Violated:" ++ show grules ++ "\t" ++ show vrules 
+
+  let violationsOfInvariants :: [(Rule,[AAtomPair])]
+      violationsOfInvariants
+        = [(r,vs) |(r,vs) <- allViolations
+                  , not (isSignal r)
+          ]
+      reportViolations :: [(Rule,[AAtomPair])] -> IO()
+      reportViolations []    = verboseLn getOpts "No violations found."
+      reportViolations viols =
+        let ruleNamesAndViolStrings = [ (name r, showprs p) | (r,p) <- viols ]
+        in  putStrLn $ intercalate "\n"
+                         [ "Violations of rule "++show r++":\n"++ concatMap (\(_,p) -> "- "++ p ++"\n") rps
+                         | rps@((r,_):_) <- groupBy (on (==) fst) $ sort ruleNamesAndViolStrings
+                         ]
+
+      showprs :: [AAtomPair] -> String
+      showprs aprs = "["++intercalate ", " (map showADL aprs)++"]"
+
+  reportViolations violationsOfInvariants
+  maybe (putStrLn "No test rule.") id $ ruleTest fSpec <$> testRule getOpts 
   
-  putStrLn $ "SQL concept table:"++getConceptTableFor
+  putStrLn $ "All SQL concept tables"
+  mapM_ print $ 
+    [(plug,att) |InternalPlug plug@TblSQL{}<-plugInfos, (c,att)<-cLkpTbl plug]++
+    [(plug,att) |InternalPlug plug@BinSQL{}<-plugInfos, (c,att)<-cLkpTbl plug]++
+    [(plug,sqlColumn plug) |InternalPlug plug@ScalarSQL{}<-plugInfos] 
+
 
   
 
@@ -115,8 +137,8 @@ doGenProto fSpec =
 
        showprs :: [AAtomPair] -> String
        showprs aprs = "["++intercalate ", " (map showADL aprs)++"]"
-      showpr :: AAtomPair -> String
-	  showpr apr = "( "++(showVal.apLeft) apr++", "++(showVal.apRight) apr++" )"
+       -- showpr :: AAtomPair -> String
+       -- showpr apr = "( "++(showVal.apLeft) apr++", "++(showVal.apRight) apr++" )"
        reportSignals []        = verboseLn (getOpts fSpec) "No signals for the initial population."
        reportSignals conjViols = verboseLn (getOpts fSpec) $ "Signals for initial population:\n" ++ intercalate "\n"
          [   "Rule(s): "++(show . map name . rc_orgRules) conj
