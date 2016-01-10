@@ -15,6 +15,7 @@ instance ECA ECArule where
 instance ECA Event where
   showECA _ (On Ins rel) = "ON INSERT Delta IN " ++ showREL rel
   showECA _ (On Del rel) = "ON DELETE Delta FROM " ++ showREL rel
+  showECA _ (On Upd rel) = "ON UPDATE Delta " ++ showREL rel
 
 instance ECA PAclause where
   showECA indent = showPAclause indent

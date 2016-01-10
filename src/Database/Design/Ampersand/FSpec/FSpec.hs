@@ -144,6 +144,10 @@ instance Unique A_Pair where
 concDefs :: FSpec -> A_Concept -> [ConceptDef]
 concDefs fSpec c = [ cdef | cdef<-conceptDefs fSpec, name cdef==name c ]
 
+-- needs to be changed to be more specific, left for now to get range of motions 
+concDefs :: FSpec -> A_Concept -> [ConceptDef]
+concDefs fSpec d = [ ddef | ddef<-conceptDefs fSpec, name ddef==name d ]
+
 instance ConceptStructure FSpec where
   concs     fSpec = allConcepts fSpec                     -- The set of all concepts used in this FSpec
   expressionsIn fSpec = allExprs fSpec

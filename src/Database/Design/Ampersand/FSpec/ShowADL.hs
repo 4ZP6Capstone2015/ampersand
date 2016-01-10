@@ -470,9 +470,10 @@ showPAclause :: String -> PAclause -> String
 showPAclause indent pa@Do{}
        = ( case paSrt pa of
             Ins -> "INSERT INTO "
-            Del -> "DELETE FROM ")++
+            Del -> "DELETE FROM "
+			Upd -> "UPDATE ")++
          showREL (paTo pa) ++
-         indent++" SELECTFROM "++
+         indent++" SELECT FROM "++
          showADL (paDelta pa)++
          indent++motivate indent "TO MAINTAIN " (paMotiv pa)
 showPAclause indent (New c clause cj_ruls)
