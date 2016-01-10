@@ -14,6 +14,7 @@ data SQLStatement
 
 
 eca2SQL :: FSpec -> ECArule -> SQLStatement 
-eca2SQL fSpec (ECA trigger delta action _) = _ 
+eca2SQL fSpec (ECA trigger delta action _) = error "TODO"  
 
-
+paClause2SQL :: FSpec -> PAclause -> SQLStatement
+paClause2SQL fSpec Nop = Block [] 
