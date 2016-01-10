@@ -470,8 +470,7 @@ showPAclause :: String -> PAclause -> String
 showPAclause indent pa@Do{}
        = ( case paSrt pa of
             Ins -> "INSERT INTO "
-            Del -> "DELETE FROM "
-			Upd -> "UPDATE ")++
+            Del -> "DELETE FROM ")++
          showREL (paTo pa) ++
          indent++" SELECT FROM "++
          showADL (paDelta pa)++

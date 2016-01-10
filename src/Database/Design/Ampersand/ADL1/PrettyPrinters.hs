@@ -2,7 +2,7 @@
 module Database.Design.Ampersand.ADL1.PrettyPrinters(prettyPrint)
 where
 
-import Text.PrettyPrint.Leijen
+import Text.PrettyPrint.Leijen 
 import Database.Design.Ampersand.Basics        (fatal)
 import Database.Design.Ampersand.Core.ParseTree
 import Database.Design.Ampersand.Input.ADL1.Lexer(keywords)

@@ -1,4 +1,4 @@
-{-# OPTIONS_GHC -Wall -Werror #-}
+-- {-# OPTIONS_GHC -Wall -Werror #-}
 {-# LANGUAGE LambdaCase #-}
 -- unfortunately not in GHC yet, try to add this line when at GHC 8.0: {-# ApplicativeDo #-}
 module Database.Design.Ampersand.ADL1.P2A_Converters (pCtx2aCtx,pCpt2aCpt)

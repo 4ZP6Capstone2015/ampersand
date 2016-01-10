@@ -23,7 +23,7 @@ aCtx2pCtx ctx =
       , ctx_ks     = map aIdentityDef2pIdentityDef . ctxks $ ctx
       , ctx_rrules = map aRoleRule2pRoleRule  .ctxrrules $ ctx
       , ctx_rrels  = map aRoleRelation2pRoleRelation . ctxRRels $ ctx
-      , ctx_reprs  = ctxreprs ctx
+      -- , ctx_reprs  = ctxreprs ctx
       , ctx_vs     = map aViewDef2pViewDef . ctxvs $ ctx
       , ctx_gs     = map aGen2pGen . ctxgs $ ctx
       , ctx_ifcs   = map aInterface2pInterface . ctxifcs $ ctx
@@ -329,11 +329,11 @@ aSubIfc2pSubIfc sub =
                       , si_class = mStr
                       , si_box   = map aObjectDef2pObjectDef objs
                       }
-  InterfaceRef isLinkto str 
-    -> P_InterfaceRef { si_ori    = fatal 295 "Origin is not present in SubInterface"
-                      , si_isLink = isLinkto
-                      , si_str    = str
-                      }
+  -- InterfaceRef isLinkto str 
+  --   -> P_InterfaceRef { si_ori    = fatal 295 "Origin is not present in SubInterface"
+  --                     , si_isLink = isLinkto
+  --                     , si_str    = str
+  --                     }
 
 
 

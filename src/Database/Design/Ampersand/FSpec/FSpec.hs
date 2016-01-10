@@ -141,8 +141,6 @@ instance Unique A_Pair where
   showUnique x = uniqueShow False (lnkDcl x)
               ++ uniqueShow False (lnkLeft x)
               ++ uniqueShow False (lnkRight x)
-concDefs :: FSpec -> A_Concept -> [ConceptDef]
-concDefs fSpec c = [ cdef | cdef<-conceptDefs fSpec, name cdef==name c ]
 
 -- needs to be changed to be more specific, left for now to get range of motions 
 concDefs :: FSpec -> A_Concept -> [ConceptDef]

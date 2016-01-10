@@ -106,25 +106,27 @@ getSqlConceptTable fSpec c =
     ; atomsDummies <- performQuery (getOpts fSpec) tempDbName query
     ; return (c, map fst atomsDummies)
     }
-getAllSqlConcept :: FSpec -> A_Concept -> IO (A_Concept, [String])
-getAllSqlConcept fSpec d =
- do { 
-		let query = case of lookupCpt fSpec d of
-						[]					-> fatal 58 "No tables exist under concept" ++ name d ++
-						(table, conceptAttribute): _ -> "SELECT * `" ++attName conceptAttribute ++ "` as s`rc`, NULL as `tgt`" ++
-														" FROM `" ++ name table ++"`" ++
+
+-- getAllSqlConcept :: FSpec -> A_Concept -> IO (A_Concept, [String])
+-- getAllSqlConcept fSpec d =
+--  do { 
+-- 		let query = case lookupCpt fSpec d of
+-- 		-- 				[]					-> fatal 58 "No tables exist under concept" ++ name d ++
+-- 		-- 				(table, conceptAttribute): _ -> "SELECT * `" ++attName conceptAttribute ++ "` as s`rc`, NULL as `tgt`" ++
+-- 		-- 												" FROM `" ++ name table ++"`" ++
 														
-	; atomsDummies <- performQuery (getOpts fSpec) tempDbName query
-    ; return (e, map fst atomsDummies)
- }
-getAllSqlTables :: FSpec -> IO([String])
-getAllSqlTables fSpec q = 
-do {
-		let query = case of q
-						[] 					-> "SHOW TABLES"
-						(table)				-> "Explain `" ++ name table ++"`"
-						(_) 				-> fatal 58 "Error, no args needed"
-}
+--     ; atomsDummies <- performQuery (getOpts fSpec) tempDbName query
+--     ; return (e, map fst atomsDummies)
+--  }
+
+-- getAllSqlTables :: FSpec -> IO([String])
+-- getAllSqlTables fSpec q = 
+-- do {
+-- 		let query = case of q
+-- 						[] 					-> "SHOW TABLES"
+-- 						(table)				-> "Explain `" ++ name table ++"`"
+-- 						(_) 				-> fatal 58 "Error, no args needed"
+-- }
  
 
 getSqlRelationTable :: FSpec -> Declaration -> IO (Declaration, [(String,String)])
@@ -147,10 +149,10 @@ data SQLEditOp = SQLAddToConcept { atomNm :: String, conceptNm :: String }
                            , childAtomNm :: String, childConceptNm ::String
                            , parentOrChild :: ParentOrChild, originalAtomNm :: String 
                            }
-				|SQLInsert { relationNm:: String, relationIsFlipped:: Bool
-							, parentAtomNm:: String, parentConceptNm:: String
-							, parentOrChild :: ParentOrChild, addedAtomNm :: String
-							}
+               | SQLInsert { relationNm:: String, relationIsFlipped:: Bool
+                           , parentAtomNm:: String, parentConceptNm:: String
+                           , parentOrChild :: ParentOrChild, addedAtomNm :: String
+                           }
 
 data ParentOrChild = Parent | Child deriving Show
 
