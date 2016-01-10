@@ -81,7 +81,7 @@ data Options = Options { showVersion :: Bool
                        , sqlPwd :: String  -- pass password on to the database server
                        , oldNormalizer :: Bool
                        , iDirs :: [String] -- Dirs to look for includes - default . 
-                       }
+                       } deriving Show 
 
 getOptions :: IO Options
 getOptions =
