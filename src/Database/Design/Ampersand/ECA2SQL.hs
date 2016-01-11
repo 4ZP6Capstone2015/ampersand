@@ -22,7 +22,7 @@ paClause2SQL :: FSpec -> PAclause -> SQLStatement
 paClause2SQL fSpec (Nop _motiv) = Block [] 
 
 -- -- src_col needs to be string, need to query table for column name? -- right now its src_tgtcol
--- paClause2SQL fpec (Do _motiv) = Block [SqlInsert src [src_tgtcol] ListSqlExpr[paMotiv] ]
+-- paClause2SQL fpec (Do _motiv) = Block [SqlInsert name table [src] ParensSqlExp (paDelta) CaseSqlExpr [paMotiv]  ]
 
 -- paClause2SQL ALL (Do _motive) = 
 
