@@ -30,8 +30,11 @@ data TableSpec = TableSpec
   , tableColumns :: [Name] 
   } 
 
--- A set of table values. 
-data TableValues = TableValues { tableAssocs :: [(Name, AAtomValue)] } 
+-- A type representing table expressions composed of ampersand values. 
+data AVecValue 
+  = TableValues { columnAliases :: [ Maybe Name ], tableRows :: [ [ AVecValue ] ] } 
+  | VectorValue [[AVecValue]] 
+  | ScalarValue AAtomValue 
 
 -- Used to distinguish sql methods from statements. The only difference 
 -- is that a method cannot be "sequenced" with `:>>='. Essentially this
@@ -44,8 +47,21 @@ type SQLStatement = SQLSt 'Stmt
 data SQLMethod = SQLMethod 
   { mtdName :: Name 
   , mtdParams :: [Name] 
-  , mtdBody :: SQLSt 'Mthd () 
+  , mtdBody :: SQLSt 'Mthd ValueExpr 
   }
+
+type SQLMethodName = Name
+
+-- Types which can be interpretted in the domain of sql expressions 
+data SQLType a where 
+  SQLRef :: SQLType Name
+  SQLVal :: SQLType ValueExpr
+  SQLUnit :: SQLType () 
+
+class IsSQLType a where sqlType :: SQLType a 
+instance IsSQLType Name where sqlType = SQLRef
+instance IsSQLType ValueExpr where sqlType = SQLVal  
+instance IsSQLType () where sqlType = SQLUnit  
 
 -- TODO: Pretty printer for SQL statements
 
@@ -72,14 +88,19 @@ data SQLSt (x :: SQLSem) a where
   DropTable :: TableSpec -> SQLStatement () 
   -- Create/dropping tables 
 
-  IfSQL :: ValueExpr -> SQLStatement Bool 
+  IfSQL :: ValueExpr -> SQLStatement a -> SQLStatement a -> SQLStatement ()  
   -- An If statement takes a boolean valued expression. 
  
-  (:>>=) :: SQLStatement a -> (a -> SQLSt x b) -> SQLSt x b 
-  SQLNoop :: SQLStatement () 
-  -- Semantics 
+  (:>>=) :: IsSQLType a => SQLStatement a -> (a -> SQLSt x b) -> SQLSt x b 
+  SQLRet :: IsSQLType a => a -> SQLSt x a 
+  -- Semantics. Only allowed for sql types. 
 
-  SQLRet :: ValueExpr -> SQLSt 'Mthd ()  
+  SQLFunCall :: SQLMethodName -> [ ValueExpr ] -> SQLStatement ValueExpr 
+  SQLDefunMethod :: SQLMethod -> SQLStatement SQLMethodName 
+  -- Methods 
+
+pattern SQLNoop :: SQLStatement () 
+pattern SQLNoop = SQLRet () 
 
 -- Convert a declaration to a table specification.
 -- Based on Database.Design.Ampersand.FSpec.SQL.selectDeclaration
@@ -152,16 +173,14 @@ eca2SQL fSpec@FSpec{originalContext,plugInfos} (ECA _ delta action _) =
           NewRef SQLBool (Just "checkDone") (Just sqlFalse) :>>= \checkDone -> 
           let fin = SetRef k (BinOp (Iden [k]) ["OR"] (Iden [checkDone])) in
           foldl (\doPs p -> paClause2SQL p checkDone :>>= \_ -> 
-                            IfSQL (Iden [checkDone]) :>>= \case
-                             { True -> SQLNoop; _ -> doPs } 
+                            IfSQL (Iden [checkDone]) SQLNoop doPs 
                  ) fin ps 
           
         paClause2SQL (ALL ps _motive) = \k -> 
           NewRef SQLBool (Just "checkDone") Nothing :>>= \checkDone -> 
           foldl (\doPs p -> SetRef checkDone sqlFalse :>>= \_ -> 
                             paClause2SQL p checkDone :>>= \_ -> 
-                            IfSQL (Iden [checkDone]) :>>= \case 
-                             { True -> doPs; _ -> SQLNoop }
+                            IfSQL (Iden [checkDone]) doPs SQLNoop
                 ) (SetRef k (Iden[checkDone])) ps 
 
         paClause2SQL (GCH ps _motive) = \k -> 
@@ -169,12 +188,10 @@ eca2SQL fSpec@FSpec{originalContext,plugInfos} (ECA _ delta action _) =
           let fin = SetRef k (BinOp (Iden [k]) ["OR"] (Iden [checkDone])) in
           foldl (\doPs (neg, gr, p) -> 
                    let nneg = case neg of { Ins -> id; Del -> PrefixOp ["NOT"] } in 
-                   IfSQL (nneg $ SubQueryExpr SqExists $ expr2SQL' gr) :>>= \case
-                     True -> paClause2SQL p checkDone :>>= \_ -> 
-                             IfSQL (Iden [checkDone]) :>>= \case 
-                               True  -> SQLNoop 
-                               False -> doPs
-                     False -> doPs
+                   IfSQL (nneg $ SubQueryExpr SqExists $ expr2SQL' gr) 
+                     (paClause2SQL p checkDone :>>= \_ -> 
+                      IfSQL (Iden [checkDone]) SQLNoop doPs
+                     ) doPs
                  ) fin ps 
 
         paClause2SQL _ = error "paClause2SQL: unsupported operation" 
