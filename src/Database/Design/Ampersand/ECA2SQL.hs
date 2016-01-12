@@ -1,18 +1,23 @@
-{-# LANGUAGE PatternSynonyms, PatternGuards, NoMonomorphismRestriction, LambdaCase, ViewPatterns, OverloadedStrings #-} 
+{-# LANGUAGE PatternSynonyms, NoMonomorphismRestriction, OverloadedStrings #-} 
 {-# OPTIONS -fno-warn-unticked-promoted-constructors #-} 
 
 module Database.Design.Ampersand.ECA2SQL 
   ( module Database.Design.Ampersand.ECA2SQL
   ) where 
 
-import Database.Design.Ampersand.Core.AbstractSyntaxTree
-import Database.Design.Ampersand.FSpec 
-import Language.SQL.SimpleSQL.Syntax
-import Database.Design.Ampersand.FSpec.SQL 
-import Database.Design.Ampersand.FSpec.FSpecAux 
+import Database.Design.Ampersand.Core.AbstractSyntaxTree 
+  (ECArule(..), PAclause(..), Expression(..), Declaration(..), AAtomValue(..), InsDel(..))
+import Database.Design.Ampersand.FSpec (FSpec(..), SqlTType(..)) 
+import Language.SQL.SimpleSQL.Syntax 
+  ( QueryExpr(..), ValueExpr(..), Name(..), TableRef(..), InPredValue(..), SubQueryExprType(..) 
+  , makeSelect
+  ) 
+import Database.Design.Ampersand.FSpec.SQL (expr2SQL) 
+import Database.Design.Ampersand.FSpec.FSpecAux (getDeclarationTableInfo,getConceptTableInfo)
 import Database.Design.Ampersand.Basics (Named(..))
 import Database.Design.Ampersand.Core.ParseTree (makePSingleton)
 import GHC.Exts (IsString(..))
+import Database.Design.Ampersand.ADL1.Expression (subst)
 
 instance IsString Name where fromString = Name 
 
@@ -94,6 +99,7 @@ sqlNull = SpecialOp ["NULL"] []
 
 -- TODO: This function could do with some comments 
 -- TODO: Test eca2SQL
+-- TODO: Properly deal with the delta.. this will almost certainly not work.
 eca2SQL :: FSpec -> ECArule -> SQLMethod
 eca2SQL fSpec (ECA _ delta action _) = SQLMethod "ecaRule" [Name deltaNm] $ 
   NewRef SQLBool (Just "checkDone") (Just sqlFalse) :>>= \nm -> 
@@ -101,6 +107,8 @@ eca2SQL fSpec (ECA _ delta action _) = SQLMethod "ecaRule" [Name deltaNm] $
   SQLRet (Iden [nm])
   
     where 
+        expr2SQL' = subst (_,_) . expr2SQL fSpec 
+
         done = \r -> SetRef r sqlTrue 
         notDone = const SQLNoop
 
@@ -110,12 +118,12 @@ eca2SQL fSpec (ECA _ delta action _) = SQLMethod "ecaRule" [Name deltaNm] $
       
         paClause2SQL :: PAclause -> (Name -> SQLStatement ())
         paClause2SQL (Do Ins insInto toIns _motive) = \k -> 
-          Insert (decl2TableSpec fSpec insInto) (expr2SQL fSpec toIns) :>>= const (done k) 
+          Insert (decl2TableSpec fSpec insInto) (expr2SQL' toIns) :>>= const (done k) 
       
         paClause2SQL (Do Del delFrom toDel _motive) = 
           let sp@TableSpec{tableColumns = [src, tgt]} = decl2TableSpec fSpec delFrom
               srcE = Iden [src]; tgtE = Iden [tgt] 
-              fromDelta = makeSelect { qeFrom = [ TRQueryExpr $ expr2SQL fSpec toDel ] }
+              fromDelta = makeSelect { qeFrom = [ TRQueryExpr $ expr2SQL' toDel ] }
               dom = fromDelta { qeSelectList = [(srcE, Nothing)] }
               cod = fromDelta { qeSelectList = [(tgtE, Nothing)] }
               cond = BinOp (In True srcE $ InQueryExpr dom) ["AND"] (In True tgtE $ InQueryExpr cod)
@@ -146,7 +154,7 @@ eca2SQL fSpec (ECA _ delta action _) = SQLMethod "ecaRule" [Name deltaNm] $
                                 Ins -> id  
                                 Del -> PrefixOp ["NOT"] 
                    in 
-                   IfSQL (nneg $ SubQueryExpr SqExists $ expr2SQL fSpec gr) 
+                   IfSQL (nneg $ SubQueryExpr SqExists $ expr2SQL' gr) 
                      ( paClause2SQL p checkDone :>>= \_ -> 
                        IfSQL (Iden [checkDone]) SQLNoop doPs
                      ) doPs
