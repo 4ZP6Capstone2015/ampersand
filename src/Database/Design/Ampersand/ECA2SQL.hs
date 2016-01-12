@@ -1,4 +1,4 @@
-{-# LANGUAGE PatternSynonyms, NoMonomorphismRestriction, OverloadedStrings #-} 
+{-# LANGUAGE PatternSynonyms, NoMonomorphismRestriction, OverloadedStrings, LambdaCase #-} 
 {-# OPTIONS -fno-warn-unticked-promoted-constructors #-} 
 
 module Database.Design.Ampersand.ECA2SQL 
@@ -15,6 +15,7 @@ import Language.SQL.SimpleSQL.Syntax
   , makeSelect
   ) 
 import Database.Design.Ampersand.FSpec.FSpec (PlugSQL(..), PlugInfo(..))
+import Database.Design.Ampersand.FSpec.ToFSpec.ADL2Plug 
 import Database.Design.Ampersand.FSpec.SQL (expr2SQL) 
 import Database.Design.Ampersand.FSpec.FSpecAux (getDeclarationTableInfo,getConceptTableInfo)
 import Database.Design.Ampersand.Basics (Named(..))
@@ -55,7 +56,7 @@ data SQLSt (x :: SQLSem) a where
   Delete :: TableSpec -> ValueExpr -> SQLStatement () 
   -- Delete from a table those values specified by the predicate
  
-  Update :: TableSpec -> ValueExpr -> [(String, ValueExpr)] -> SQLStatement () 
+  Update :: TableSpec -> ValueExpr -> [(Name, ValueExpr)] -> SQLStatement () 
   -- Same as above, this time taking two functions, the first is again the where
   -- clause, the 2nd computes the values to be updated. 
 
@@ -71,8 +72,9 @@ data SQLSt (x :: SQLSem) a where
   DropTable :: TableSpec -> SQLStatement () 
   -- Create/dropping tables 
 
-  IfSQL :: {-IF-} ValueExpr -> {-THEN-} SQLStatement a -> {-ELSE-} SQLStatement a -> SQLStatement a 
-
+  IfSQL :: ValueExpr -> SQLStatement Bool 
+  -- An If statement takes a boolean valued expression. 
+ 
   (:>>=) :: SQLStatement a -> (a -> SQLSt x b) -> SQLSt x b 
   SQLNoop :: SQLStatement () 
   -- Semantics 
@@ -102,21 +104,25 @@ sqlNull = SpecialOp ["NULL"] []
 -- TODO: This function could do with some comments 
 -- TODO: Test eca2SQL
 -- TODO: Properly deal with the delta.. this will almost certainly not work.
+-- TODO: Add an option to the ampersand executable which will print all of the 
+--       eca rules and their corresponding SQL methods to stderr. 
 eca2SQL :: FSpec -> ECArule -> SQLMethod
-eca2SQL fSpec@FSpec{} (ECA _ delta action _) = 
+eca2SQL fSpec@FSpec{originalContext,plugInfos} (ECA _ delta action _) = 
  SQLMethod "ecaRule" [Name deltaNm] $ 
   NewRef SQLBool (Just "checkDone") (Just sqlFalse) :>>= \nm -> 
   paClause2SQL action nm :>>= \_ -> 
   SQLRet (Iden [nm])
   
     where 
-        -- deltaObj = Obj 
-        --   { objnm = name delta, objpos = OriginUnknown, objctx = DcD eDcl -- ??
-        --   , objcrud = Cruds OriginUnknown Nothing Nothing Nothing Nothing 
-        --   , objmsub = Nothing, objstrs = [], objmView = Nothing 
-        --   }
-        -- fSpec' = fSpec { plugInfos = InternalPlug (makeUserDefinedSqlPlug originalContext deltaObj) : plugInfos } 
-        expr2SQL' = expr2SQL fSpec 
+        -- TODO: Figure out how this plug stuff works... 
+        deltaObj = Obj 
+          { objnm = name delta, objpos = OriginUnknown, objctx = EDcD delta
+          , objcrud = Cruds OriginUnknown (Just True) (Just True) (Just True) (Just True) 
+          , objmsub = Nothing, objstrs = [], objmView = Nothing 
+          }
+        deltaPlug = makeUserDefinedSqlPlug originalContext deltaObj
+        fSpec' = fSpec { plugInfos = InternalPlug deltaPlug : plugInfos } 
+        expr2SQL' = expr2SQL fSpec' 
 
         done = \r -> SetRef r sqlTrue 
         notDone = const SQLNoop
@@ -127,7 +133,8 @@ eca2SQL fSpec@FSpec{} (ECA _ delta action _) =
       
         paClause2SQL :: PAclause -> (Name -> SQLStatement ())
         paClause2SQL (Do Ins insInto toIns _motive) = \k -> 
-          Insert (decl2TableSpec fSpec insInto) (expr2SQL' toIns) :>>= const (done k) 
+          Insert (decl2TableSpec fSpec insInto) (expr2SQL' toIns) :>>= 
+          const (done k) 
       
         paClause2SQL (Do Del delFrom toDel _motive) = 
           let sp@TableSpec{tableColumns = [src, tgt]} = decl2TableSpec fSpec delFrom
@@ -145,29 +152,29 @@ eca2SQL fSpec@FSpec{} (ECA _ delta action _) =
           NewRef SQLBool (Just "checkDone") (Just sqlFalse) :>>= \checkDone -> 
           let fin = SetRef k (BinOp (Iden [k]) ["OR"] (Iden [checkDone])) in
           foldl (\doPs p -> paClause2SQL p checkDone :>>= \_ -> 
-                            IfSQL (Iden [checkDone]) SQLNoop doPs
+                            IfSQL (Iden [checkDone]) :>>= \case
+                             { True -> SQLNoop; _ -> doPs } 
                  ) fin ps 
           
         paClause2SQL (ALL ps _motive) = \k -> 
           NewRef SQLBool (Just "checkDone") Nothing :>>= \checkDone -> 
           foldl (\doPs p -> SetRef checkDone sqlFalse :>>= \_ -> 
                             paClause2SQL p checkDone :>>= \_ -> 
-                            IfSQL (Iden [checkDone]) doPs SQLNoop     
+                            IfSQL (Iden [checkDone]) :>>= \case 
+                             { True -> doPs; _ -> SQLNoop }
                 ) (SetRef k (Iden[checkDone])) ps 
 
         paClause2SQL (GCH ps _motive) = \k -> 
           NewRef SQLBool (Just "checkDone") (Just sqlFalse) :>>= \checkDone -> 
           let fin = SetRef k (BinOp (Iden [k]) ["OR"] (Iden [checkDone])) in
           foldl (\doPs (neg, gr, p) -> 
-                   let nneg = case neg of 
-                                Ins -> id  
-                                Del -> PrefixOp ["NOT"] 
-                   in 
-                   IfSQL (nneg $ SubQueryExpr SqExists $ expr2SQL' gr) 
-                     ( paClause2SQL p checkDone :>>= \_ -> 
-                       IfSQL (Iden [checkDone]) SQLNoop doPs
-                     ) doPs
-                     
+                   let nneg = case neg of { Ins -> id; Del -> PrefixOp ["NOT"] } in 
+                   IfSQL (nneg $ SubQueryExpr SqExists $ expr2SQL' gr) :>>= \case
+                     True -> paClause2SQL p checkDone :>>= \_ -> 
+                             IfSQL (Iden [checkDone]) :>>= \case 
+                               True  -> SQLNoop 
+                               False -> doPs
+                     False -> doPs
                  ) fin ps 
 
         paClause2SQL _ = error "paClause2SQL: unsupported operation" 
