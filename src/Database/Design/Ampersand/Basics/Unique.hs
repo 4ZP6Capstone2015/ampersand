@@ -12,10 +12,16 @@ import Data.Typeable
 import Data.List
 import Data.Char
 import Database.Design.Ampersand.Basics.Version
+import Language.SQL.SimpleSQL.Syntax (Name(..), ValueExpr(..), Dialect(..))
+import Language.SQL.SimpleSQL.Pretty (prettyValueExpr)
 
 -- | anything could have some label, can't it?
 class Named a where
   name :: a->String
+
+-- Placed here to avoid orphans 
+instance Named Name where 
+  name n = prettyValueExpr MySQL $ Iden [n]
 
 -- | In the context of the haskell code, things can be Unique. 
 class (Typeable e, Eq e) => Unique e where 

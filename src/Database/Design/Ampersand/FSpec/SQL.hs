@@ -1,5 +1,5 @@
 module Database.Design.Ampersand.FSpec.SQL
-  ( prettySQLQuery)
+  ( prettySQLQuery, expr2SQL )
   
 where
 import Language.SQL.SimpleSQL.Syntax
@@ -28,7 +28,8 @@ instance SQLAble Expression where
 instance SQLAble Declaration where
   prettySQLQuery = makeANice . selectDeclaration
   
-     
+expr2SQL :: FSpec -> Expression -> QueryExpr 
+expr2SQL fs e = toSQL $ selectExpr fs e
 
 sourceAlias, targetAlias :: Name
 sourceAlias = (Name "src") 
@@ -619,7 +620,6 @@ atomVal2InSQL val =
 toTableRef :: BinQueryExpr -> TableRef
 toTableRef = TRQueryExpr . toSQL
      
-
 selectDeclaration :: FSpec -> Declaration -> BinQueryExpr
 selectDeclaration fSpec dcl =
   case dcl of
