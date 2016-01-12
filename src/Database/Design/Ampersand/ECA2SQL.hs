@@ -6,18 +6,20 @@ module Database.Design.Ampersand.ECA2SQL
   ) where 
 
 import Database.Design.Ampersand.Core.AbstractSyntaxTree 
-  (ECArule(..), PAclause(..), Expression(..), Declaration(..), AAtomValue(..), InsDel(..))
+  ( ECArule(..), PAclause(..), Expression(..), Declaration(..), AAtomValue(..), InsDel(..), Event(..)
+  , A_Context(..), ObjectDef(..), ObjectDef(..), Origin(..), Cruds(..)
+  )
 import Database.Design.Ampersand.FSpec (FSpec(..), SqlTType(..)) 
 import Language.SQL.SimpleSQL.Syntax 
   ( QueryExpr(..), ValueExpr(..), Name(..), TableRef(..), InPredValue(..), SubQueryExprType(..) 
   , makeSelect
   ) 
+import Database.Design.Ampersand.FSpec.FSpec (PlugSQL(..), PlugInfo(..))
 import Database.Design.Ampersand.FSpec.SQL (expr2SQL) 
 import Database.Design.Ampersand.FSpec.FSpecAux (getDeclarationTableInfo,getConceptTableInfo)
 import Database.Design.Ampersand.Basics (Named(..))
 import Database.Design.Ampersand.Core.ParseTree (makePSingleton)
 import GHC.Exts (IsString(..))
-import Database.Design.Ampersand.ADL1.Expression (subst)
 
 instance IsString Name where fromString = Name 
 
@@ -101,13 +103,20 @@ sqlNull = SpecialOp ["NULL"] []
 -- TODO: Test eca2SQL
 -- TODO: Properly deal with the delta.. this will almost certainly not work.
 eca2SQL :: FSpec -> ECArule -> SQLMethod
-eca2SQL fSpec (ECA _ delta action _) = SQLMethod "ecaRule" [Name deltaNm] $ 
+eca2SQL fSpec@FSpec{} (ECA _ delta action _) = 
+ SQLMethod "ecaRule" [Name deltaNm] $ 
   NewRef SQLBool (Just "checkDone") (Just sqlFalse) :>>= \nm -> 
   paClause2SQL action nm :>>= \_ -> 
   SQLRet (Iden [nm])
   
     where 
-        expr2SQL' = subst (_,_) . expr2SQL fSpec 
+        -- deltaObj = Obj 
+        --   { objnm = name delta, objpos = OriginUnknown, objctx = DcD eDcl -- ??
+        --   , objcrud = Cruds OriginUnknown Nothing Nothing Nothing Nothing 
+        --   , objmsub = Nothing, objstrs = [], objmView = Nothing 
+        --   }
+        -- fSpec' = fSpec { plugInfos = InternalPlug (makeUserDefinedSqlPlug originalContext deltaObj) : plugInfos } 
+        expr2SQL' = expr2SQL fSpec 
 
         done = \r -> SetRef r sqlTrue 
         notDone = const SQLNoop
