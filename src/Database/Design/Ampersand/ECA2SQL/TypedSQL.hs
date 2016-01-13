@@ -1,17 +1,19 @@
 {-# LANGUAGE PatternSynonyms, NoMonomorphismRestriction, OverloadedStrings, LambdaCase, EmptyCase #-} 
 {-# LANGUAGE TemplateHaskell, QuasiQuotes, ScopedTypeVariables, PolyKinds, UndecidableInstances, DataKinds, DefaultSignatures #-}
+{-# LANGUAGE PartialTypeSignatures #-} 
 {-# OPTIONS -fno-warn-unticked-promoted-constructors #-} 
 
 module Database.Design.Ampersand.ECA2SQL.TypedSQL 
-  ( Prod(..), Sum(..), All(..), Elem(..), AppliedTo(..), DecideEq(..), Sing(..), SingT(..), (:~:)(..)
+  ( Prod(..), Sum(..), All(..), Elem(..), AppliedTo(..), DecideEq(..), Sing(..), SingT(..), (:~:)(..), withSingT
+  , IfA(..), if_ap, if_pure
   -- SQL stuff
   , Symbol, SymbolSing, Nat, NatSing, RecLabel(..), SQLType(..), SQLRefType, SQLRow, SQLVec, SQLRel, SQLAtom, SQLBool
-  , SQLTypeS, SQLValProto, bimapProto, SQLVal, SQLValSem(Unit) -- Ctrs not exported!
+  , SQLTypeS, SQLValProto, bimapProto, foldProto, SQLVal, SQLValSem(Unit) -- Ctrs not exported!
   , pattern Method, pattern Ref, pattern Val
   , unsafeSqlValFromName, deref
-  , TableSpec(..), ColumnSpec(..), SQLMethod(..), SQLSem, SQLStatement, IsScalarType
+  , TableSpec, ColumnSpec(..), SQLMethod(..), SQLSem, SQLStatement, IsScalarType, isScalarType
   , SQLSt(..)
-  , getSQLVal, unsafeSQLVal
+  , getSQLVal, elimSQLVal, unsafeSQLVal, typeOf 
   , RecsAssocs
   , module Sm
   ) where 
@@ -24,6 +26,7 @@ import qualified GHC.TypeLits as TL
 import GHC.TypeLits (Symbol)
 import GHC.Exts (Constraint)
 import Data.Type.Equality ((:~:)(..))
+import Unsafe.Coerce 
 
 -- Basic model SQL types represented in Haskell 
 
@@ -60,6 +63,11 @@ type family (&&) (x :: Bool) (y :: Bool) :: Bool where
   x && 'False = 'False 
   'True && 'True = 'True 
 
+(.&&) :: SingT a -> SingT b -> SingT (a && b)
+SFalse .&& _ = SFalse 
+_ .&& SFalse = SFalse 
+STrue .&& STrue = STrue 
+
 -- Decidable equality 
 class DecideEq (f :: k -> *) where 
   (%==) :: forall x y . f x -> f y -> Maybe (x :~: y) 
@@ -83,6 +91,15 @@ data family SingT (y :: k)
 class Sing x where 
   sing :: SingT x 
 
+-- Based on http://okmij.org/ftp/Haskell/tr-15-04.pdf and
+-- https://hackage.haskell.org/package/reflection-2.1.1.1/docs/src/Data-Reflection.html#reify
+
+newtype Magic x r = Magic (Sing x => r)
+
+withSingT :: forall (x :: k) r . SingT x -> (Sing x => r) -> r 
+withSingT a k = unsafeCoerce (Magic k :: Magic x r) a   
+{-# INLINE withSingT #-}
+
 -- Symbol
 data instance SingT (y :: Symbol) where 
   SSymbol :: TL.KnownSymbol x => Proxy x -> SingT x 
@@ -99,6 +116,11 @@ instance Sing 'Z where sing = SZ
 instance Sing n => Sing ('S n) where sing = SS sing 
 
 data Nat = Z | S Nat 
+
+-- BOOl
+data instance SingT (x :: Bool) where 
+  STrue :: SingT 'True 
+  SFalse :: SingT 'False 
 
 -- SQL Types 
 
@@ -141,7 +163,20 @@ type family IsScalarType (x :: k) :: Bool where
   IsScalarType '[] = 'True 
   IsScalarType (x ': xs) = IsScalarType x && IsScalarType xs 
   IsScalarType (x :: SQLType) = 'True
-  
+
+isScalarType :: SingT (x :: SQLType) -> SingT (IsScalarType x)
+isScalarType (SQLSing (SSQLAtom ())) = STrue 
+isScalarType (SQLSing (SSQLBool ())) = STrue 
+isScalarType (SQLSing (SSQLVec () vs0)) = 
+  case vs0 of 
+    PNil -> STrue
+    PCons v vs ->  isScalarType v .&& isScalarType (SQLSing $ SSQLVec () vs)
+isScalarType (SQLSing (SSQLRow () ts0)) = 
+  case ts0 of 
+    PNil -> STrue 
+    PCons (SRecLabel _ t) ts -> isScalarType t .&& isScalarType (SQLSing $ SSQLRow () ts)
+isScalarType (SQLSing (SSQLRel () _)) = SFalse   
+
 -- Singletons for SQLType 
 instance (Sing a, Sing b) => Sing (a ::: b) where sing = SRecLabel sing sing 
 instance (All Sing xs) => Sing ('SQLRow xs) where sing = SQLSing $ SSQLRow () (mkProdC (Proxy :: Proxy Sing) sing) 
@@ -156,24 +191,88 @@ data SQLValProto scalar vector (x :: SQLType) where
   SSQLBool :: a -> SQLValProto a b 'SQLBool
   SSQLRow :: a -> Prod SingT ts -> SQLValProto a b ('SQLRow ts)
   SSQLVec :: a -> Prod SingT ts -> SQLValProto a b ('SQLVec ts) 
-  SSQLRel :: SQLValProto v v x -> SQLValProto s v ('SQLRel x) 
+  SSQLRel :: v -> SingT x -> SQLValProto s v ('SQLRel x) 
 
 bimapProto :: (a -> a') -> (b -> b') -> SQLValProto a b x -> SQLValProto a' b' x 
 bimapProto f _ (SSQLAtom a) = SSQLAtom (f a) 
 bimapProto f _ (SSQLBool a) = SSQLBool (f a) 
-bimapProto _ g (SSQLRel x) = SSQLRel (bimapProto g g x) 
+bimapProto _ g (SSQLRel x t) = SSQLRel (g x) t 
 bimapProto f _ (SSQLRow b ts) = SSQLRow (f b) ts
 bimapProto f _ (SSQLVec b ts) = SSQLVec (f b) ts
+
+foldProto :: (a -> r) -> (b -> r) -> SQLValProto a b x -> r
+foldProto f _ (SSQLAtom a) = f a 
+foldProto f _ (SSQLBool a) = f a 
+foldProto _ g (SSQLRel x _) = g x 
+foldProto f _ (SSQLRow b _) = f b
+foldProto f _ (SSQLVec b _) = f b
 
 -- A SQL value contains value expressions 
 newtype SQLVal a = SQLVal (SQLValProto ValueExpr QueryExpr a)
 
+-- Get the type of a value 
+typeOf :: SQLVal a -> SingT a 
+typeOf (SQLVal x) = SQLSing (bimapProto (const ()) (const ()) x) 
+
+-- Get the actual tree
 getSQLVal :: SQLVal x -> SQLValProto ValueExpr QueryExpr x
 getSQLVal (SQLVal x) = x 
 
-unsafeSQLVal :: SQLValProto ValueExpr QueryExpr x -> SQLVal x 
-unsafeSQLVal = SQLVal 
+{-
+-- Lift an unary function to a sql value
+unsafeSQLOp1 :: forall x . If (IsScalarType x) (ValueExpr -> ValueExpr) (QueryExpr -> QueryExpr) 
+             -> SQLVal x -> SQLVal x 
+unsafeSQLOp1 f x = 
+  let fun = IfA f :: IfA (IsScalarType x) (ValueExpr -> ValueExpr) (QueryExpr -> QueryExpr)
+      ty_x = typeOf x 
+  in withSingT ty_x $ 
+     withSingT (isScalarType ty_x) $ 
+     unsafeSQLVal $ getIfA $ if_ap fun (IfA $ elimSQLVal x) 
 
+unsafeSQLOp2 :: forall x . If (IsScalarType x) (ValueExpr -> ValueExpr -> ValueExpr) (QueryExpr -> QueryExpr -> QueryExpr) 
+             -> SQLVal x -> SQLVal x -> SQLVal x 
+unsafeSQLOp2 f x y = 
+  let fun = IfA f :: IfA (IsScalarType x) (ValueExpr -> ValueExpr -> ValueExpr) (QueryExpr -> QueryExpr -> QueryExpr) 
+      ty_x = typeOf x 
+  in withSingT ty_x $ 
+     withSingT (isScalarType ty_x) $  
+     unsafeSQLVal $ getIfA $ fun `if_ap` (IfA $ elimSQLVal x) `if_ap` (IfA $ elimSQLVal y)
+ -}
+
+-- Eliminate a sqlVal with proof of the resulting type. 
+elimSQLVal :: forall x . SQLVal x -> If (IsScalarType x) ValueExpr QueryExpr  
+elimSQLVal (SQLVal x) = 
+  case isScalarType (SQLSing $ bimapProto (const ()) (const ()) x) of 
+    STrue  -> foldProto id (\_ -> error "elimSQLVal:impossible") x 
+    SFalse -> foldProto (Values . pure . pure {- TODO: Is this safe? -} ) id x 
+
+-- Lift a primitive value to a sql value 
+unsafeSQLVal :: forall x . Sing x => If (IsScalarType x) ValueExpr QueryExpr -> SQLVal x
+unsafeSQLVal val = let s = sing :: SingT x in 
+  case isScalarType s of 
+    STrue -> SQLVal $ bimapProto (const val) (const $ error "unsafeSQLVal:impossible") $ getSQLSing s
+    SFalse -> SQLVal $ bimapProto (const $ error "unsafeSQLVal:impossible") (const val) $ getSQLSing s
+
+type family If (a :: Bool) (x :: k)(y :: k) :: k where 
+  If 'True x y = x 
+  If 'False x y = y 
+
+newtype IfA (c :: Bool) (x :: *) (y :: *) = IfA { getIfA :: If c x y } 
+
+
+-- If forms an applicative of sorts 
+
+if_pure :: forall a b cond . Sing cond => a -> b -> IfA cond a b 
+if_pure a b = IfA $ 
+  case sing :: SingT cond of 
+    STrue -> a 
+    SFalse -> b 
+
+if_ap :: forall a b a' b' cond. Sing cond => IfA cond (a -> a') (b -> b') -> IfA cond a b -> IfA cond a' b' 
+if_ap (IfA f) (IfA a) = IfA $ 
+  case sing :: SingT cond of 
+    STrue -> f a 
+    SFalse -> f a 
 
 -- Semantics in the interpreter 
 data SQLValSem (x :: SQLRefType) where 
@@ -182,7 +281,10 @@ data SQLValSem (x :: SQLRefType) where
   Ref_ :: Sing x => Name -> SQLValSem ('SQLRef x) 
   Val_ :: SQLVal x -> SQLValSem ('Ty x) 
   
+-- A SQLValRef is a reference to a sql value in the domain of the semantic interpretation. 
 type SQLValRef x = SQLValSem ('SQLRef x)
+
+-- Same as above, but a reference to a method is distinct from that to a value. 
 type SQLMethodRef args out = SQLValSem ('SQLMethod args out) 
 
 unsafeSqlValFromName :: forall x . Sing x => Name -> SQLVal x 
@@ -193,8 +295,8 @@ unsafeSqlValFromName nm = SQLVal $ bimapProto nm0 nm1 (getSQLSing sing)
 deref :: forall x . SQLValRef x -> SQLVal x 
 deref (Ref_ nm) = unsafeSqlValFromName nm 
 
--- Pattern match only (no constructor syntax). These can safely be exported and
--- constitute what can and cannot be distinguished at expression compile time. 
+-- Pattern match only (no constructor syntax). These permit access (but not the
+-- ability to construct) to the underlying untyped representation. 
 pattern Method nm <- Method_ nm 
 pattern Ref x <- Ref_ x 
 pattern Val x <- Val_ x 
@@ -202,7 +304,7 @@ pattern Val x <- Val_ x
 instance DecideEq (SingT :: SQLType -> *) where 
   SQLSing (SSQLAtom ()) %== SQLSing (SSQLAtom ()) = Just Refl 
   SQLSing (SSQLBool ()) %== SQLSing (SSQLBool ()) = Just Refl 
-  SQLSing (SSQLRel x) %== SQLSing (SSQLRel y) = fmap (cong Refl) (SQLSing x %== SQLSing y)
+  SQLSing (SSQLRel () x) %== SQLSing (SSQLRel () y) = fmap (cong Refl) (x %== y)
   SQLSing (SSQLRow () ts0) %== SQLSing (SSQLRow () ts1) = fmap (cong Refl) (ts0 %== ts1)
   SQLSing (SSQLVec () ts0) %== SQLSing (SSQLVec () ts1) = fmap (cong Refl) (ts0 %== ts1)
   _ %== _ = Nothing 
@@ -212,8 +314,9 @@ instance (DecideEq (SingT :: k0 -> *), DecideEq (SingT :: k1 -> *)) => DecideEq 
 
 -- SQL statements
 
-data TableSpec ts where 
-  MkTable :: All Sing ts => Name -> TableSpec ts 
+-- The specification of a table is a reference to a relation on rows 
+-- of the table type. 
+type TableSpec t = SQLValRef ('SQLRel ('SQLRow t))
 
 type family RecsAssocs (ts :: [RecLabel a b]) :: [b] where 
   RecsAssocs '[] = '[] 
@@ -231,7 +334,6 @@ data ColumnSpec (ts :: [RecLabel Symbol SQLType]) where
 
 data SQLMethod ts out where 
   MkSQLMethod :: Maybe String -> (Prod SQLVal ts -> SQLSt 'Mthd ('Ty out)) -> SQLMethod ts out 
-
 
 -- Used to distinguish sql methods from statements. The only difference 
 -- is that a method cannot be "sequenced" with `:>>='. Essentially this
@@ -261,7 +363,9 @@ data SQLSt (x :: SQLSem) (a :: SQLRefType) where
   -- value of the reference is null. We only allow references to scalar types -
   -- otherwise, a table should be used.
 
-  MakeTable :: TableSpec t -> SQLStatement 'SQLUnit 
+  MakeTable :: TableSpec t -> SQLStatement ('SQLRef ('SQLRel ('SQLRow t)))
+  -- Returns a reference to a relation on values of records of the table spec. 
+
   DropTable :: TableSpec t -> SQLStatement 'SQLUnit 
   -- Create/dropping tables. Should really bind some sort of table reference, 
   -- but this prevents referencing tables which are known to exist, but
