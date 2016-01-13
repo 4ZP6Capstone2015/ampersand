@@ -11,10 +11,9 @@ module Database.Design.Ampersand.ECA2SQL.TypedSQL
   , SQLTypeS, SQLValProto, bimapProto, foldProto, SQLVal, SQLValSem(Unit) -- Ctrs not exported!
   , pattern Method, pattern Ref, pattern Val
   , unsafeSqlValFromName, deref
-  , TableSpec, ColumnSpec(..), SQLMethod(..), SQLSem, SQLStatement, IsScalarType, isScalarType
+  , TableSpec, SQLMethod(..), SQLSem, SQLStatement, IsScalarType, isScalarType
   , SQLSt(..)
   , getSQLVal, elimSQLVal, unsafeSQLVal, typeOf 
-  , RecsAssocs
   , module Sm
   ) where 
 
@@ -318,6 +317,7 @@ instance (DecideEq (SingT :: k0 -> *), DecideEq (SingT :: k1 -> *)) => DecideEq 
 -- of the table type. 
 type TableSpec t = SQLValRef ('SQLRel ('SQLRow t))
 
+{-
 type family RecsAssocs (ts :: [RecLabel a b]) :: [b] where 
   RecsAssocs '[] = '[] 
   RecsAssocs ((x ::: t) ': r) = t ': RecsAssocs r 
@@ -331,6 +331,7 @@ data ColumnSpec (ts :: [RecLabel Symbol SQLType]) where
 
   ScalarExpr :: Sing nm => SQLVal ('SQLRel t) -> ColumnSpec '[ nm ::: t ]
   -- In the case that the table has one row, a relational expression containing exactly that type. 
+-}
 
 data SQLMethod ts out where 
   MkSQLMethod :: Maybe String -> (Prod SQLVal ts -> SQLSt 'Mthd ('Ty out)) -> SQLMethod ts out 
@@ -343,14 +344,14 @@ data SQLSem = Stmt | Mthd
 type SQLStatement = SQLSt 'Stmt
 
 data SQLSt (x :: SQLSem) (a :: SQLRefType) where
-  Insert :: TableSpec ts -> ColumnSpec ts -> SQLStatement 'SQLUnit 
+  Insert :: TableSpec ts -> SQLVal ('SQLRel ('SQLRow ts)) -> SQLStatement 'SQLUnit 
   -- Given a table and a query, insert those values into that table. Overloaded to work with both vectors and 
   -- tables. If the input is a table, it is implicitly casted to the shape of the table before insertion. 
 
   Delete :: TableSpec ts -> SQLVal 'SQLBool -> SQLStatement 'SQLUnit 
   -- Delete from a table those values specified by the predicate
  
-  Update :: TableSpec ts -> SQLVal 'SQLBool -> ColumnSpec ts -> SQLStatement 'SQLUnit 
+  Update :: TableSpec ts -> SQLVal 'SQLBool -> SQLVal ('SQLRow ts) -> SQLStatement 'SQLUnit 
   -- Same as above, this time taking two functions, the first is again the where
   -- clause, the 2nd computes the values to be updated. 
 
