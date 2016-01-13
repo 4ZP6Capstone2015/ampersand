@@ -351,7 +351,7 @@ data SQLSt (x :: SQLSem) (a :: SQLRefType) where
   Delete :: TableSpec ts -> SQLVal 'SQLBool -> SQLStatement 'SQLUnit 
   -- Delete from a table those values specified by the predicate
  
-  Update :: TableSpec ts -> SQLVal 'SQLBool -> SQLVal ('SQLRow ts) -> SQLStatement 'SQLUnit 
+  Update :: TableSpec ts -> SQLVal 'SQLBool -> (SQLValRef ('SQLRow ts) -> SQLVal ('SQLRow ts)) -> SQLStatement 'SQLUnit 
   -- Same as above, this time taking two functions, the first is again the where
   -- clause, the 2nd computes the values to be updated. 
 
@@ -364,8 +364,8 @@ data SQLSt (x :: SQLSem) (a :: SQLRefType) where
   -- value of the reference is null. We only allow references to scalar types -
   -- otherwise, a table should be used.
 
-  MakeTable :: TableSpec t -> SQLStatement ('SQLRef ('SQLRel ('SQLRow t)))
-  -- Returns a reference to a relation on values of records of the table spec. 
+  MakeTable :: SQLTypeS ('SQLRow t) -> SQLStatement ('SQLRef ('SQLRel ('SQLRow t)))
+  -- Returns a reference to a new table created with the given signature.  
 
   DropTable :: TableSpec t -> SQLStatement 'SQLUnit 
   -- Create/dropping tables. Should really bind some sort of table reference, 
