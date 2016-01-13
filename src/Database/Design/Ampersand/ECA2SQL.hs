@@ -160,21 +160,22 @@ eca2SQL fSpec@FSpec{originalContext,plugInfos} (ECA _ delta action _) =
           }
         deltaPlug = makeUserDefinedSqlPlug originalContext deltaObj
         fSpec' = fSpec { plugInfos = InternalPlug deltaPlug : plugInfos } 
-        expr2SQL' = expr2SQL fSpec' 
-
+        expr2SQL' = expr2SQL fSpec'             -- calling expr2SQL function from SQL.hs
+                                                -- returns a QueryExpr (for a select query)    
         done = \r -> SetRef r sqlTrue 
         notDone = const SQLNoop
-
+        
         deltaNm = case delta of 
-                    Sgn{} -> decnm delta 
+                    Sgn{} -> decnm delta        -- returns the name of the declaration 
                     _ -> error "eca2SQL: Got a delta which is not a parameter"
       
         paClause2SQL :: PAclause -> (Name -> SQLStatement ())
-        paClause2SQL (Do Ins insInto toIns _motive) = \k -> 
-          Insert (decl2TableSpec fSpec insInto) (expr2SQL' toIns) :>>= 
-          const (done k) 
+        paClause2SQL (Do Ins insInto toIns _motive) = \k ->                 -- PAClause case of Insert
+          Insert (decl2TableSpec fSpec insInto) (expr2SQL' toIns) :>>=      -- Insert :: TableSpec -> QueryExpr -> SQLStatement ()  
+          const (done k)                                                    -- decl2TableSpec = fetch table specification
+                                                                            -- expr2SQL = calls expr2SQL from SQL.hs, returns a QueryExpr for the toIns (Expression)
       
-        paClause2SQL (Do Del delFrom toDel _motive) = 
+        paClause2SQL (Do Del delFrom toDel _motive) =                       -- PAClause case of Delete
           let sp@TableSpec{tableColumns = [src, tgt]} = decl2TableSpec fSpec delFrom
               srcE = Iden [src]; tgtE = Iden [tgt] 
               fromDelta = makeSelect { qeFrom = [ TRQueryExpr $ expr2SQL' toDel ] }
@@ -183,25 +184,27 @@ eca2SQL fSpec@FSpec{originalContext,plugInfos} (ECA _ delta action _) =
               cond = BinOp (In True srcE $ InQueryExpr dom) ["AND"] (In True tgtE $ InQueryExpr cod)
           in \k -> Delete sp cond :>>= const (done k)
              
-        paClause2SQL (Nop _motive) = done
-        paClause2SQL (Blk _motive) = notDone
+        paClause2SQL (Nop _motive) = done                                   -- PAClause case of Nop
+        paClause2SQL (Blk _motive) = notDone                                -- PAClause case of Blk
+                                                                            -- tells which expression from whichule has caused the blockage
+                                                                            -- Ideally this case won't be reached in our project
 
-        paClause2SQL (CHC ps _motive) = \k -> 
+        paClause2SQL (CHC ps _motive) = \k ->                               -- PAClause case of CHC; ps is the precisely one clause to be executed
           NewRef SQLBool (Just "checkDone") (Just sqlFalse) :>>= \checkDone -> 
           let fin = SetRef k (BinOp (Iden [k]) ["OR"] (Iden [checkDone])) in
           foldl (\doPs p -> paClause2SQL p checkDone :>>= \_ -> 
                             IfSQL (Iden [checkDone]) SQLNoop doPs 
                  ) fin ps 
           
-        paClause2SQL (ALL ps _motive) = \k -> 
+        paClause2SQL (ALL ps _motive) = \k ->                               -- PAClause case of ALL; all PAClauses are executed
           NewRef SQLBool (Just "checkDone") Nothing :>>= \checkDone -> 
-          foldl (\doPs p -> SetRef checkDone sqlFalse :>>= \_ -> 
+          foldl (\doPs p -> SetRef checkDone sqlFalse :>>= \_ ->            -- sequential execution of all PAClauses
                             paClause2SQL p checkDone :>>= \_ -> 
                             IfSQL (Iden [checkDone]) doPs SQLNoop
                 ) (SetRef k (Iden[checkDone])) ps 
 
-        paClause2SQL (GCH ps _motive) = \k -> 
-          NewRef SQLBool (Just "checkDone") (Just sqlFalse) :>>= \checkDone -> 
+        paClause2SQL (GCH ps _motive) = \k ->                                    -- PAClause case of GHC
+          NewRef SQLBool (Just "checkDone") (Just sqlFalse) :>>= \checkDone ->   -- guarded choice; The rule is maintained if one of the clauses of which the expression is populated is executed.
           let fin = SetRef k (BinOp (Iden [k]) ["OR"] (Iden [checkDone])) in
           foldl (\doPs (neg, gr, p) -> 
                    let nneg = case neg of { Ins -> id; Del -> PrefixOp ["NOT"] } in 
