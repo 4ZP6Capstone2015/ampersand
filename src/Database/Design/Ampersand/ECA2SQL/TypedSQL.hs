@@ -4,7 +4,10 @@
 {-# OPTIONS -fno-warn-unticked-promoted-constructors #-} 
 
 module Database.Design.Ampersand.ECA2SQL.TypedSQL 
-  ( Prod(..), Sum(..), All(..), Elem(..), AppliedTo(..), DecideEq(..), Sing(..), SingT(..), (:~:)(..), withSingT
+  ( module Database.Design.Ampersand.ECA2SQL.TypedSQL 
+  , module Sm
+{- TODO exports list 
+    Prod(..), Sum(..), All(..), Elem(..), AppliedTo(..), DecideEq(..), Sing(..), SingT(..), (:~:)(..), withSingT
   , IfA(..), if_ap, if_pure
   -- SQL stuff
   , Symbol, SymbolSing, Nat, NatSing, RecLabel(..), SQLType(..), SQLRefType, SQLRow, SQLVec, SQLRel, SQLAtom, SQLBool
@@ -14,7 +17,7 @@ module Database.Design.Ampersand.ECA2SQL.TypedSQL
   , TableSpec, SQLMethod(..), SQLSem, SQLStatement, IsScalarType, isScalarType
   , SQLSt(..)
   , getSQLVal, elimSQLVal, unsafeSQLVal, typeOf 
-  , module Sm
+-} 
   ) where 
 
 import Control.Applicative
@@ -26,100 +29,9 @@ import GHC.TypeLits (Symbol)
 import GHC.Exts (Constraint)
 import Data.Type.Equality ((:~:)(..))
 import Unsafe.Coerce 
+import Database.Design.Ampersand.ECA2SQL.Utils 
 
 -- Basic model SQL types represented in Haskell 
-
--- Generic combinators 
-data Prod (f :: k -> *) (xs :: [k]) where 
-  PNil :: Prod f '[] 
-  PCons :: f x -> Prod f xs -> Prod f (x ': xs) 
-
-data Sum (f :: k -> *) (xs :: [k]) where 
-  SHere :: f x -> Sum f (x ': xs) 
-  SThere :: Sum f xs -> Sum f (x ': xs) 
-
-class All (c :: k -> Constraint) (xs :: [k]) where   
-  mkProdC :: Proxy c -> (forall a . c a => p a) -> Prod p xs 
-
-instance All (c :: k -> Constraint) '[] where mkProdC _ _ = PNil 
-instance (All c xs, c x) => All c (x ': xs) where mkProdC pr k = PCons k (mkProdC pr k) 
-
-cong :: f :~: g -> a :~: b -> f a :~: g b 
-cong Refl Refl = Refl 
-
-cong2 :: f :~: g -> a :~: a' -> b :~: b' -> f a b :~: g a' b' 
-cong2 Refl Refl Refl = Refl 
-
--- cong3 :: f :~: g -> a :~: a' -> b :~: b' -> c :~: c' -> f a b c :~: g a' b' c' 
--- cong3 Refl Refl Refl Refl = Refl 
-
-newtype Elem (x :: k) (xs :: [k]) = MkElem { getElem :: Sum ((:~:) x) xs }
-
-data AppliedTo (x :: k) (f :: k -> *) where Ap :: f x -> x `AppliedTo` f 
-
-type family (&&) (x :: Bool) (y :: Bool) :: Bool where 
-  'False && x = 'False 
-  x && 'False = 'False 
-  'True && 'True = 'True 
-
-(.&&) :: SingT a -> SingT b -> SingT (a && b)
-SFalse .&& _ = SFalse 
-_ .&& SFalse = SFalse 
-STrue .&& STrue = STrue 
-
--- Decidable equality 
-class DecideEq (f :: k -> *) where 
-  (%==) :: forall x y . f x -> f y -> Maybe (x :~: y) 
-
-instance (DecideEq f) => DecideEq (Prod f) where 
-  PNil %== PNil = Just Refl 
-  PCons x xs %== PCons y ys = liftA2 (cong2 Refl) (x %== y) (xs %== ys) 
-  _ %== _ = Nothing 
-
-instance DecideEq (SingT :: Nat -> *) where 
-  SZ %== SZ = Just Refl 
-  SS n %== SS m = fmap (cong Refl) $ n %== m 
-  _ %== _ = Nothing 
-
-instance DecideEq (SingT :: Symbol -> *) where 
-  SSymbol s0 %== SSymbol s1 = TL.sameSymbol s0 s1 
-
--- Generic singleton indexed on kind
-data family SingT (y :: k) 
-
-class Sing x where 
-  sing :: SingT x 
-
--- Based on http://okmij.org/ftp/Haskell/tr-15-04.pdf and
--- https://hackage.haskell.org/package/reflection-2.1.1.1/docs/src/Data-Reflection.html#reify
-
-newtype Magic x r = Magic (Sing x => r)
-
-withSingT :: forall (x :: k) r . SingT x -> (Sing x => r) -> r 
-withSingT a k = unsafeCoerce (Magic k :: Magic x r) a   
-{-# INLINE withSingT #-}
-
--- Symbol
-data instance SingT (y :: Symbol) where 
-  SSymbol :: TL.KnownSymbol x => Proxy x -> SingT x 
-type SymbolSing = (SingT :: Symbol -> *)
-instance TL.KnownSymbol x => Sing x where 
-  sing = SSymbol Proxy 
-
--- Nat 
-data instance SingT (y :: Nat) where 
-  SZ :: SingT 'Z 
-  SS :: SingT n -> SingT ('S n) 
-type NatSing = (SingT :: Nat -> *)
-instance Sing 'Z where sing = SZ 
-instance Sing n => Sing ('S n) where sing = SS sing 
-
-data Nat = Z | S Nat 
-
--- BOOl
-data instance SingT (x :: Bool) where 
-  STrue :: SingT 'True 
-  SFalse :: SingT 'False 
 
 -- SQL Types 
 
@@ -169,11 +81,11 @@ isScalarType (SQLSing (SSQLBool ())) = STrue
 isScalarType (SQLSing (SSQLVec () vs0)) = 
   case vs0 of 
     PNil -> STrue
-    PCons v vs ->  isScalarType v .&& isScalarType (SQLSing $ SSQLVec () vs)
+    PCons v vs ->  isScalarType v |&& isScalarType (SQLSing $ SSQLVec () vs)
 isScalarType (SQLSing (SSQLRow () ts0)) = 
   case ts0 of 
     PNil -> STrue 
-    PCons (SRecLabel _ t) ts -> isScalarType t .&& isScalarType (SQLSing $ SSQLRow () ts)
+    PCons (SRecLabel _ t) ts -> isScalarType t |&& isScalarType (SQLSing $ SSQLRow () ts)
 isScalarType (SQLSing (SSQLRel () _)) = SFalse   
 
 -- Singletons for SQLType 
@@ -181,6 +93,8 @@ instance (Sing a, Sing b) => Sing (a ::: b) where sing = SRecLabel sing sing
 instance (All Sing xs) => Sing ('SQLRow xs) where sing = SQLSing $ SSQLRow () (mkProdC (Proxy :: Proxy Sing) sing) 
 instance (All Sing xs) => Sing ('SQLVec xs) where sing = SQLSing $ SSQLVec () (mkProdC (Proxy :: Proxy Sing) sing) 
 instance Sing 'SQLAtom where sing = SQLSing $ SSQLAtom ()
+instance Sing 'SQLBool where sing = SQLSing $ SSQLBool ()
+
 
 -- A reference to a SQL value. Contains evidence of the type and the underlying
 -- untype expression. This is essentially the type of SQL
@@ -213,10 +127,6 @@ newtype SQLVal a = SQLVal (SQLValProto ValueExpr QueryExpr a)
 typeOf :: SQLVal a -> SingT a 
 typeOf (SQLVal x) = SQLSing (bimapProto (const ()) (const ()) x) 
 
--- Get the actual tree
-getSQLVal :: SQLVal x -> SQLValProto ValueExpr QueryExpr x
-getSQLVal (SQLVal x) = x 
-
 {-
 -- Lift an unary function to a sql value
 unsafeSQLOp1 :: forall x . If (IsScalarType x) (ValueExpr -> ValueExpr) (QueryExpr -> QueryExpr) 
@@ -245,6 +155,9 @@ elimSQLVal (SQLVal x) =
     STrue  -> foldProto id (\_ -> error "elimSQLVal:impossible") x 
     SFalse -> foldProto (Values . pure . pure {- TODO: Is this safe? -} ) id x 
 
+elimSQLVal' :: forall x r . (ValueExpr -> r) -> (QueryExpr -> r) -> SQLVal x -> r  
+elimSQLVal' val qry (SQLVal x) = foldProto val qry x 
+
 -- Lift a primitive value to a sql value 
 unsafeSQLVal :: forall x . Sing x => If (IsScalarType x) ValueExpr QueryExpr -> SQLVal x
 unsafeSQLVal val = let s = sing :: SingT x in 
@@ -252,26 +165,6 @@ unsafeSQLVal val = let s = sing :: SingT x in
     STrue -> SQLVal $ bimapProto (const val) (const $ error "unsafeSQLVal:impossible") $ getSQLSing s
     SFalse -> SQLVal $ bimapProto (const $ error "unsafeSQLVal:impossible") (const val) $ getSQLSing s
 
-type family If (a :: Bool) (x :: k)(y :: k) :: k where 
-  If 'True x y = x 
-  If 'False x y = y 
-
-newtype IfA (c :: Bool) (x :: *) (y :: *) = IfA { getIfA :: If c x y } 
-
-
--- If forms an applicative of sorts 
-
-if_pure :: forall a b cond . Sing cond => a -> b -> IfA cond a b 
-if_pure a b = IfA $ 
-  case sing :: SingT cond of 
-    STrue -> a 
-    SFalse -> b 
-
-if_ap :: forall a b a' b' cond. Sing cond => IfA cond (a -> a') (b -> b') -> IfA cond a b -> IfA cond a' b' 
-if_ap (IfA f) (IfA a) = IfA $ 
-  case sing :: SingT cond of 
-    STrue -> f a 
-    SFalse -> f a 
 
 -- Semantics in the interpreter 
 data SQLValSem (x :: SQLRefType) where 

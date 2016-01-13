@@ -20,9 +20,7 @@ import Database.Design.Ampersand.FSpec.SQL (expr2SQL)
 import Database.Design.Ampersand.FSpec.FSpecAux (getDeclarationTableInfo,getConceptTableInfo)
 import Database.Design.Ampersand.Basics (Named(..))
 import Database.Design.Ampersand.Core.ParseTree (makePSingleton)
-import GHC.Exts (IsString(..))
-
-instance IsString Name where fromString = Name 
+import Database.Design.Ampersand.ECA2SQL.Utils  () 
 
 -- A specification of a table contains the name of that table and all of its columns.
 data TableSpec = TableSpec 
