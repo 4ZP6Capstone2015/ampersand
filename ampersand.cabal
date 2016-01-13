@@ -167,7 +167,8 @@ library
                      Database.Design.Ampersand.Output.ToJSON.Conjuncts,
                      Database.Design.Ampersand.Output.ToJSON.Interfaces,
                      Database.Design.Ampersand.Output.ToJSON.Others,
-                     Database.Design.Ampersand.ECA2SQL
+                     Database.Design.Ampersand.ECA2SQL,
+                     Database.Design.Ampersand.ECA2SQL.TypedSQL
 
                 
 executable ampersand

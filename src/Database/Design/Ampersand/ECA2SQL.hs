@@ -1,4 +1,4 @@
-{-# LANGUAGE PatternSynonyms, NoMonomorphismRestriction, OverloadedStrings, LambdaCase #-} 
+{-# LANGUAGE PatternSynonyms, NoMonomorphismRestriction, OverloadedStrings, LambdaCase, RoleAnnotations #-} 
 {-# OPTIONS -fno-warn-unticked-promoted-constructors #-} 
 
 module Database.Design.Ampersand.ECA2SQL 
@@ -31,10 +31,12 @@ data TableSpec = TableSpec
   } 
 
 -- A type representing table expressions composed of ampersand values. 
-data AVecValue 
-  = TableValues { columnAliases :: [ Maybe Name ], tableRows :: [ [ AVecValue ] ] } 
-  | VectorValue [[AVecValue]] 
-  | ScalarValue AAtomValue 
+data TableValue = TableValue { columnAliases :: [ Maybe Name ], tableRows :: [ [AAtomValue] ] } 
+
+data RowValue a = RowValue { getRowValue :: [ (Maybe Name, a) ] } 
+
+-- A type represeting a vector of values. 
+newtype VectorValue a = VectorValue { getVectorValue :: [a] }
 
 -- Used to distinguish sql methods from statements. The only difference 
 -- is that a method cannot be "sequenced" with `:>>='. Essentially this
@@ -44,24 +46,39 @@ data SQLSem = Stmt | Mthd
 type SQLStatement = SQLSt 'Stmt
 
 -- TODO: Mock database which runs SQL statements
-data SQLMethod = SQLMethod 
+data SQLMethod a = SQLMethod 
   { mtdName :: Name 
   , mtdParams :: [Name] 
-  , mtdBody :: SQLSt 'Mthd ValueExpr 
+  , mtdBody :: SQLSt 'Mthd a 
   }
 
-type SQLMethodName = Name
+type role SQLMethod nominal 
+newtype SQLMethodName a = MthdName { getMthdName :: Name }
 
 -- Types which can be interpretted in the domain of sql expressions 
 data SQLType a where 
-  SQLRef :: SQLType Name
-  SQLVal :: SQLType ValueExpr
-  SQLUnit :: SQLType () 
+  -- Expression types 
+  SQLRef    :: SQLType Name
+  SQLMthd   :: SQLType a -> SQLType (SQLMethodName a) 
+  SQLGRef   :: SQLType ValueExpr
+
+  -- Values types
+  SQLScalar :: SQLType AAtomValue 
+  SQLTable  :: SQLType TableValue
+  SQLUnit   :: SQLType () 
+  SQLVec    :: SQLType a -> SQLType (VectorValue a)
+  SQLRow    :: SQLType a -> SQLType (RowValue a) 
 
 class IsSQLType a where sqlType :: SQLType a 
 instance IsSQLType Name where sqlType = SQLRef
-instance IsSQLType ValueExpr where sqlType = SQLVal  
-instance IsSQLType () where sqlType = SQLUnit  
+instance IsSQLType ValueExpr where sqlType = SQLGRef  
+
+instance IsSQLType AAtomValue where sqlType = SQLScalar  
+instance IsSQLType TableValue where sqlType = SQLTable
+instance IsSQLType () where sqlType = SQLUnit    
+instance IsSQLType a => IsSQLType (VectorValue a) where sqlType = SQLVec sqlType   
+instance IsSQLType a => IsSQLType (RowValue a) where sqlType = SQLRow sqlType
+
 
 -- TODO: Pretty printer for SQL statements
 
@@ -95,8 +112,8 @@ data SQLSt (x :: SQLSem) a where
   SQLRet :: IsSQLType a => a -> SQLSt x a 
   -- Semantics. Only allowed for sql types. 
 
-  SQLFunCall :: SQLMethodName -> [ ValueExpr ] -> SQLStatement ValueExpr 
-  SQLDefunMethod :: SQLMethod -> SQLStatement SQLMethodName 
+  SQLFunCall :: SQLMethodName a -> VectorValue ValueExpr -> SQLStatement a
+  SQLDefunMethod :: SQLMethod a -> SQLStatement (SQLMethodName a)
   -- Methods 
 
 pattern SQLNoop :: SQLStatement () 
@@ -127,7 +144,7 @@ sqlNull = SpecialOp ["NULL"] []
 -- TODO: Properly deal with the delta.. this will almost certainly not work.
 -- TODO: Add an option to the ampersand executable which will print all of the 
 --       eca rules and their corresponding SQL methods to stderr. 
-eca2SQL :: FSpec -> ECArule -> SQLMethod
+eca2SQL :: FSpec -> ECArule -> SQLMethod ValueExpr 
 eca2SQL fSpec@FSpec{originalContext,plugInfos} (ECA _ delta action _) = 
  SQLMethod "ecaRule" [Name deltaNm] $ 
   NewRef SQLBool (Just "checkDone") (Just sqlFalse) :>>= \nm -> 
