@@ -40,6 +40,13 @@ class All (c :: k -> Constraint) (xs :: [k]) where
 instance All (c :: k -> Constraint) '[] where mkProdC _ _ = PNil 
 instance (All c xs, c x) => All c (x ': xs) where mkProdC pr k = PCons k (mkProdC pr k) 
 
+-- non emtpy list predicate
+type family NonEmpty (xs :: [k]) :: Constraint where 
+  NonEmpty (x ': xs) = () 
+
+-- Reify a class as a value
+data Dict p where Dict :: p => Dict p 
+
 -- Manipulating equality proofs 
 cong :: f :~: g -> a :~: b -> f a :~: g b 
 cong Refl Refl = Refl 
@@ -56,6 +63,9 @@ newtype Elem (x :: k) (xs :: [k]) = MkElem { getElem :: Sum ((:~:) x) xs }
 
 -- Also known as flip 
 data AppliedTo (x :: k) (f :: k -> *) where Ap :: f x -> x `AppliedTo` f 
+
+data Flip (f :: k0 -> k1 -> *) (x :: k1) (y :: k0) where 
+  Flp :: f y x -> Flip f x y
 
 -- Type level OR 
 type family (&&) (x :: Bool) (y :: Bool) :: Bool where 
@@ -126,6 +136,53 @@ instance Sing 'True where sing = STrue
 instance Sing 'False where sing = SFalse 
 
 
+-- Maybe 
+data instance SingT (x :: Maybe k) where 
+  SNothing :: SingT 'Nothing 
+  SJust :: SingT x -> SingT ('Just x)
+type MaybeSing = (SingT :: Maybe k -> *) 
+instance Sing 'Nothing where sing = SNothing 
+instance Sing x => Sing ('Just x) where sing = SJust sing  
+
+-- Record lable kind
+
+data RecLabel a b = a ::: b
+
+data instance SingT (x :: RecLabel a b) where 
+  SRecLabel :: SingT a -> SingT b -> SingT (a ::: b)
+
+instance (Sing a, Sing b) => Sing (a ::: b) where sing = SRecLabel sing sing  
+
+type family RecAssocs (xs :: [RecLabel a b]) :: [b] where 
+  RecAssocs '[] = '[] 
+  RecAssocs ((nm ::: ty) ': xs) = ty ': RecAssocs xs
+
+type family RecLabels (xs :: [RecLabel a b]) :: [a] where 
+  RecLabels '[] = '[] 
+  RecLabels ((nm ::: ty) ': xs) = nm ': RecLabels xs
+
+-- Lookup a value in a list of rec labels 
+type family Lookup (xs :: [RecLabel a b]) (x :: a) :: b where 
+  Lookup ( (nm ::: ty) ': rest ) nm = ty 
+  Lookup ( (nm ::: ty) ': rest ) nm' = Lookup rest nm' 
+
+{-
+lookupSing :: (DecideEq (SingT :: a -> *), Lookup xs nm ~ r) => Prod SingT xs -> SingT (nm :: a) -> SingT r 
+lookupSing PNil _ = error "lookupSing: impossible" 
+lookupSing (PCons (SRecLabel nm ty) rest) nm' = 
+  case nm %== nm' of 
+    Just Refl -> ty 
+    -- No clue how to write this properly.. the compiler can't tell that 
+    --   nm /= nm'   =>   Lookup ( (nm ::: ty) : rest ) nm' == Lookup rest nm 
+    -- because it doesn't know about the type inequality at all... 
+    Nothing -> unsafeCoerce $ lookupSing rest nm' 
+-}
+        
+-- List
+newtype instance SingT (x :: [k]) = MkSList { getSList :: Prod SingT x } 
+type ListSing = (SingT :: [k] -> *) 
+instance All Sing xs => Sing xs where sing = MkSList $ mkProdC (Proxy :: Proxy Sing) sing 
+
 -- Type level if. Note that this is STRICT 
 type family If (a :: Bool) (x :: k)(y :: k) :: k where 
   If 'True x y = x 
@@ -145,3 +202,4 @@ if_ap (IfA f) (IfA a) = IfA $
   case sing :: SingT cond of 
     STrue -> f a 
     SFalse -> f a 
+
