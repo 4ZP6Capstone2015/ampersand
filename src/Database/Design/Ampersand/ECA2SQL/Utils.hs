@@ -17,6 +17,7 @@ import Control.Applicative
 import Unsafe.Coerce 
 import Data.Proxy (Proxy(..), KProxy(..))
 import GHC.TypeLits (Symbol, symbolVal, sameSymbol, KnownSymbol)
+import qualified GHC.TypeLits as TL  
 import GHC.Exts (Constraint)
 import Data.Type.Equality ((:~:)(..))
 import GHC.Exts (IsString(..))
@@ -127,6 +128,50 @@ instance Sing n => Sing ('S n) where sing = SS sing
 
 data Nat = Z | S Nat 
 
+-- Inductive type literals 
+
+data IsoNat n m where 
+  IsoZ :: IsoNat 0 'Z 
+  IsoS :: SingT n -> IsoNat (n TL.+ 1) ('S n') 
+
+type family FromTL (n :: TL.Nat) :: Nat where 
+  FromTL 0 = 'Z 
+  FromTL n = 'S (FromTL (n TL.- 1))
+
+type family ToTL (n :: Nat) :: TL.Nat where 
+  ToTL 'Z = 0 
+  ToTL (S n) = ToTL n TL.+ 1 
+
+data instance SingT (y :: TL.Nat) where 
+  NatSingI :: (TL.KnownNat n) => Proxy n -> SingT n 
+
+-- caseNat :: SingT n -> (forall k . IsoNat n k -> r) -> r 
+-- caseNat = undefined -- (NatSingI n) k = undefined 
+  -- case TL.sameNat n (Proxy :: Proxy 0) of 
+  --   Just Refl -> k IsoZ 
+  --   Nothing   -> k (IsoS 
+
+--   NatSingI :: (n ~ FromTL n', n' ~ ToTL n) => SingT n -> SingT n'
+
+-- plus1Assoc :: forall n m . SingT n -> SingT m -> (n TL.+ (m TL.+ 1)) :~: ((n TL.+ m) TL.+ 1)
+-- plus1Assoc n m = caseNat m (caseNat n go) where 
+--   go :: forall k k' . IsoNat n k -> IsoNat m k' -> (n TL.+ (m TL.+ 1)) :~: ((n TL.+ m) TL.+ 1)
+--   go (IsoS n) (IsoS m) = 
+--     case plus1Assoc n m of 
+--       Refl -> Refl 
+  --   case go n m of 
+  --     Refl -> _ 
+
+  -- caseNat n 
+-- plus1Assoc (NatSingI (SS n)) (NatSingI (SS m)) = 
+--   case plus1Assoc (NatSingI n) (NatSingI m) of 
+--     r -> _ 
+
+-- plus1Assoc :: SingT n -> SingT m -> (n TL.+ (m TL.+ 1)) :~: ((n TL.+ m) TL.+ 1)
+-- plus1Assoc SZi SZi = Refl
+-- plus1Assoc (SSi _) SZi = Refl 
+-- plus1Assoc (SSi n) (SSi m) = case plus1Assoc n m of { r@Refl -> Refl } 
+
 -- BOOl
 data instance SingT (x :: Bool) where 
   STrue :: SingT 'True 
@@ -162,9 +207,12 @@ type family RecLabels (xs :: [RecLabel a b]) :: [a] where
   RecLabels ((nm ::: ty) ': xs) = nm ': RecLabels xs
 
 -- Lookup a value in a list of rec labels 
-type family Lookup (xs :: [RecLabel a b]) (x :: a) :: b where 
+type family Lookup (xs :: [k0]) (x :: k1) :: k2 where 
   Lookup ( (nm ::: ty) ': rest ) nm = ty 
   Lookup ( (nm ::: ty) ': rest ) nm' = Lookup rest nm' 
+
+  Lookup ( x ': xs ) 0 = x 
+  Lookup ( x ': xs ) n = Lookup xs (n TL.- 1)
 
 {-
 lookupSing :: (DecideEq (SingT :: a -> *), Lookup xs nm ~ r) => Prod SingT xs -> SingT (nm :: a) -> SingT r 

@@ -16,7 +16,7 @@ import Language.SQL.SimpleSQL.Syntax
   ) 
 import Database.Design.Ampersand.FSpec.FSpec (PlugSQL(..), PlugInfo(..))
 import Database.Design.Ampersand.FSpec.ToFSpec.ADL2Plug 
-import Database.Design.Ampersand.FSpec.SQL (expr2SQL(..),BinQueryExpr(..),toSQL(..),prettySQLQuery(..)) --added Bin,to,Pretty
+import Database.Design.Ampersand.FSpec.SQL (expr2SQL,prettySQLQuery) --added Bin,to,Pretty
 import Database.Design.Ampersand.FSpec.FSpecAux (getDeclarationTableInfo,getConceptTableInfo)
 import Database.Design.Ampersand.Basics (Named(..))
 import Database.Design.Ampersand.Core.ParseTree (makePSingleton)
@@ -87,14 +87,14 @@ instance IsSQLType a => IsSQLType (RowValue a) where sqlType = SQLRow sqlType
 -- nil :: Doc -- left and right unit
 -- text :: String -> Doc -- converts a string to the corresponding document
 -- text concatText = case concatText of 
-	-- (s ++ t) -> text s <> text table --homomorphism from string concat to doc concat, applied left to right
+            -- (s ++ t) -> text s <> text table --homomorphism from string concat to doc concat, applied left to right
 	-- "" -> nil
 -- line :: Doc --line break, assume string passed to text has no line break
 -- nest :: Int -> Doc -> Doc -- adds indentation to the document 
 -- nest nestText = case nestText of  -- homomorph from addition to composition, distri through concat
 	-- (i+j) x -> nest i (nest j x) -- applied left to right
 	-- 0 x -> x -- applied left to right 
-	-- i (x <> y) -> nest i x <> nest i y -- applied right to left
+	-- (x <> y) -> nest i x <> nest i y -- applied right to left
 	-- i nil -> nil -- ""
 	-- i (text s) -> text s -- each law on a binary operator is paired with a corresponding law for its unit; right to left
 -- layout :: Doc -> String --converts document to a string; identity function 

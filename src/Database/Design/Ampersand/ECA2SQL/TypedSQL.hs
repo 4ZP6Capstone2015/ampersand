@@ -67,28 +67,32 @@ data instance SingT (x :: SQLType) where
 -- Determine if a SQL type is a really a scalar type. 
 type family IsScalarType (x :: k) :: Bool where 
   IsScalarType ('SQLRel x) = 'False 
-  IsScalarType ('SQLRow x) = IsScalarType x 
-  IsScalarType ('SQLVec x) = IsScalarType x 
-  IsScalarType ((nm :: Symbol) ::: (x :: SQLType)) = IsScalarType x 
-  IsScalarType '[] = 'True 
-  IsScalarType (x ': xs) = IsScalarType x && IsScalarType xs 
-  IsScalarType (x :: SQLType) = 'True
+  IsScalarType ('SQLRow x) = 'False
+  IsScalarType ('SQLVec x) = 'False
+  IsScalarType 'SQLBool = 'True
+  IsScalarType 'SQLAtom = 'True
+  
+  -- IsScalarType ('SQLRow x) = IsScalarType x 
+  -- IsScalarType ('SQLVec x) = IsScalarType x 
+  -- IsScalarType ((nm :: Symbol) ::: (x :: SQLType)) = IsScalarType x 
+  -- IsScalarType '[] = 'True 
+  -- IsScalarType (x ': xs) = IsScalarType x && IsScalarType xs 
 
 isScalarType :: SingT (x :: SQLType) -> SingT (IsScalarType x)
 isScalarType SSQLAtom = STrue 
 isScalarType SSQLBool = STrue 
-isScalarType (SSQLVec vs0) = 
+isScalarType (SSQLVec vs0) = SFalse {-
   case vs0 of 
     PNil -> STrue
-    PCons v vs ->  isScalarType v |&& isScalarType (SSQLVec vs)
-isScalarType ((SSQLRow ts0)) = 
+    PCons v vs ->  isScalarType v |&& isScalarType (SSQLVec vs) -} 
+isScalarType ((SSQLRow ts0)) = SFalse {-
   case ts0 of 
     PCons (SRecLabel _ t) PNil       -> 
       case isScalarType t of 
         STrue -> STrue 
         SFalse -> SFalse 
     PCons (SRecLabel _ t) ts@PCons{} -> isScalarType t |&& isScalarType (SSQLRow  ts)
-    _ -> error "impossible"
+    _ -> error "impossible" -}
 isScalarType (SSQLRel _) = SFalse   
 
 -- Singletons for SQLType 
