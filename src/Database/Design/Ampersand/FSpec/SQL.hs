@@ -20,9 +20,10 @@ class SQLAble a where
   prettySQLQuery :: FSpec -> Int -> a -> String
   makeANice :: (a -> BinQueryExpr) -> Int -> a -> String
   makeANice f i =
-    intercalate (if i == 0 then " " else "\n"++replicate i ' ') .  lines . 
+    intercalate (if i == 0 then " " else "\n"++replicate i ' ') .  lines . -- is i = int for space? 
        prettyQueryExpr theDialect . toSQL . f   
     
+
 instance SQLAble Expression where  
   prettySQLQuery = makeANice . selectExpr 
 instance SQLAble Declaration where
