@@ -20,7 +20,7 @@ class SQLAble a where
   prettySQLQuery :: FSpec -> Int -> a -> String
   makeANice :: (a -> BinQueryExpr) -> Int -> a -> String
   makeANice f i =
-    intercalate (if i == 0 then " " else "\n"++replicate i ' ') .  lines . -- is i = int for space? 
+    intercalate (if i == 0 then " " else "\n"++replicate i ' ') .  lines . -- is i = int for space? Yes!
        prettyQueryExpr theDialect . toSQL . f   
     
 
