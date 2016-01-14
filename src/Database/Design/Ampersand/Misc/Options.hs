@@ -25,6 +25,7 @@ import Data.Char
 --   express what the user would like Ampersand to do.
 data Options = Options { showVersion :: Bool
                        , printName :: Bool 
+                       , plugECA2SQL :: Bool -- plugIn for ECA2SQL, currently doesn't overide the default (ExecEngine)
                        , preVersion :: String
                        , postVersion :: String  --built in to aid DOS scripting... 8-(( Bummer.
                        , showHelp :: Bool
@@ -115,7 +116,8 @@ getOptions =
 
       let startOptions =
                Options {genTime          = localTime
-                      , printName        = False 
+                      , printName        = False
+                      , plugECA2SQL      = False
                       , dirOutput        = fromMaybe "."       (lookup envdirOutput    env)
                       , outputfile       = fatal 83 "No monadic options available."
                       , dirPrototype     = fromMaybe ("." </> (addExtension (takeBaseName fName) ".proto"))
@@ -409,6 +411,10 @@ options = [ (Option ['v']   ["version"]
           , (Option []        ["printName"]
                (NoArg (\opts -> return opts{printName = True}))
                "Print the name of the specification." 
+            , Public)
+          , (Option []        ["eca-2-sql"]
+               (NoArg (\opts -> return opts{plugECA2SQL = True}))
+               "Plug in ECA2SQL function" 
             , Public)
           , (Option ['I']      ["include"]
                (ReqArg (\idir opts -> return $ opts{iDirs = idir:iDirs opts}
