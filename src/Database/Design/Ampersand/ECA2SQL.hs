@@ -206,7 +206,7 @@ eca2SQL fSpec@FSpec{originalContext,plugInfos} (ECA _ delta action _) =
           }
         deltaPlug = makeUserDefinedSqlPlug originalContext deltaObj
         fSpec' = fSpec { plugInfos = InternalPlug deltaPlug : plugInfos } 
-        expr2SQL' = expr2SQL fSpec'             -- calling expr2SQL function from SQL.hs
+        expr2SQL' = expr2SQL fSpec'             -- calling expr2SQL function from Based on Database.Design.Ampersand.FSpec.SQL.expr2SQL
                                                 -- returns a QueryExpr (for a select query)    
         done = \r -> SetRef r sqlTrue 
         notDone = const SQLNoop
@@ -218,13 +218,13 @@ eca2SQL fSpec@FSpec{originalContext,plugInfos} (ECA _ delta action _) =
         paClause2SQL :: PAclause -> (Name -> SQLStatement ())
         paClause2SQL (Do Ins insInto toIns _motive) = \k ->                 -- PAClause case of Insert
           Insert (decl2TableSpec fSpec insInto) (expr2SQL' toIns) :>>=      -- Insert :: TableSpec -> QueryExpr -> SQLStatement ()  
-          const (done k)                                                    -- decl2TableSpec = fetch table specification
-                                                                            -- expr2SQL = calls expr2SQL from SQL.hs, returns a QueryExpr for the toIns (Expression)
+          const (done k)                                                    -- decl2TableSpec = fetch table specification for INSRET INTO
+                                                                            -- expr2SQL' = calls expr2SQL , returns a QueryExpr 
       
-        paClause2SQL (Do Del delFrom toDel _motive) =                       -- PAClause case of Delete
-          let sp@TableSpec{tableColumns = [src, tgt]} = decl2TableSpec fSpec delFrom
+        paClause2SQL (Do Del delFrom toDel _motive) =                                   -- PAClause case of Delete
+          let sp@TableSpec{tableColumns = [src, tgt]} = decl2TableSpec fSpec delFrom    -- get table specification for DELETE FROM
               srcE = Iden [src]; tgtE = Iden [tgt] 
-              fromDelta = makeSelect { qeFrom = [ TRQueryExpr $ expr2SQL' toDel ] }
+              fromDelta = makeSelect { qeFrom = [ TRQueryExpr $ expr2SQL' toDel ] }     
               dom = fromDelta { qeSelectList = [(srcE, Nothing)] }
               cod = fromDelta { qeSelectList = [(tgtE, Nothing)] }
               cond = BinOp (In True srcE $ InQueryExpr dom) ["AND"] (In True tgtE $ InQueryExpr cod)
