@@ -131,7 +131,6 @@ eca2SQL fSpec@FSpec{originalContext,plugInfos} (ECA _ delta action _) =
 
         paClause2SQL (Do Ins insInto toIns _motive) = \k ->                    -- PAClause case of Insert
           let tbl = decl2TableSpec fSpec insInto in 
-          withSingT (typeOfSem $ getTableSpec tbl) $                           -- Proof for unsafeSQLValFromQuery
           Insert tbl (unsafeSQLValFromQuery $ expr2SQL' toIns) :>>=            -- Insert :: TableSpec -> QueryExpr -> SQLStatement ()  
           const (done k)                                                       -- decl2TableSpec = fetch table specification
                                                                                -- expr2SQL = calls expr2SQL from SQL.hs, returns a QueryExpr for the toIns (Expression)

@@ -25,6 +25,7 @@ import Language.SQL.SimpleSQL.Syntax (Name(..))
 
 instance IsString Name where fromString = Name 
 
+
 -- Given a functor `f', `Prod f' constructs the n-ary product category of `f'
 data Prod (f :: k -> *) (xs :: [k]) where 
   PNil :: Prod f '[] 
@@ -106,9 +107,13 @@ STrue |&& STrue = STrue
 class DecideEq (f :: k -> *) where 
   (%==) :: forall x y . f x -> f y -> Maybe (x :~: y) 
 
-type family (==) (a :: k) (b :: k) :: Bool where 
-  a == a = 'True 
-  a == b = 'False 
+-- type family (==) (a :: k) (b :: k) :: Bool where 
+--   a == a = 'True 
+--   a == b = 'False 
+
+-- data DecEq (x :: k) (y :: k) where 
+--   DecYes :: DecEq a a 
+--   DecNo  :: (forall r . a :~: b -> r) -> DecEq a b 
 
 instance (DecideEq f) => DecideEq (Prod f) where 
   PNil %== PNil = Just Refl 
@@ -137,10 +142,10 @@ class ValueSing (kp :: KProxy k) where
 -- Based on http://okmij.org/ftp/Haskell/tr-15-04.pdf and
 -- https://hackage.haskell.org/package/reflection-2.1.1.1/docs/src/Data-Reflection.html#reify
 
-newtype Magic x r = Magic (Sing x => r)
+newtype Magic x r = Magic (Sing x => Proxy x -> r)
 
-withSingT :: forall (x :: k) r . SingT x -> (Sing x => r) -> r 
-withSingT a k = unsafeCoerce (Magic k :: Magic x r) a   
+withSingT :: forall (x :: k) r . SingT x -> (Sing x => Proxy x -> r) -> r
+withSingT a k = unsafeCoerce (Magic k :: Magic x r) a Proxy   
 {-# INLINE withSingT #-}
 
 -- Symbol
@@ -157,22 +162,22 @@ instance ValueSing ('KProxy :: KProxy Symbol) where
 
 symbolKindProxy = Proxy :: Proxy ('KProxy :: KProxy Symbol)
 
-data CompareSymbol a b (x :: Ordering) where 
-  SymbolLT :: !(TL.CmpSymbol a b :~: 'LT) -> CompareSymbol a b 'LT 
-  SymbolEQ :: !(TL.CmpSymbol a b :~: 'EQ) -> CompareSymbol a b 'EQ 
-  SymbolGT :: !(TL.CmpSymbol a b :~: 'GT) -> CompareSymbol a b 'GT 
+data CompareSymbol a b where 
+  SymbolLT :: !(TL.CmpSymbol a b :~: 'LT) -> CompareSymbol a b 
+  SymbolEQ :: !(TL.CmpSymbol a b :~: 'EQ) -> CompareSymbol a b 
+  SymbolGT :: !(TL.CmpSymbol a b :~: 'GT) -> CompareSymbol a b 
 
-compareSymbol' :: SingT x -> SingT y -> Exists (CompareSymbol x y)
+compareSymbol' :: SingT x -> SingT y -> CompareSymbol x y
 compareSymbol' (SSymbol x) (SSymbol y) = compareSymbol x y  
 
-compareSymbol :: forall x y . (TL.KnownSymbol x, TL.KnownSymbol y) => Proxy x -> Proxy y -> Exists (CompareSymbol x y) 
+compareSymbol :: forall x y . (TL.KnownSymbol x, TL.KnownSymbol y) => Proxy x -> Proxy y -> CompareSymbol x y 
 compareSymbol x y =  
   let trustMe :: forall a b . a :~: b 
       trustMe = unsafeCoerce (Refl :: () :~: ())
   in case compare (TL.symbolVal x) (TL.symbolVal y) of 
-       LT -> Ex (SymbolLT (trustMe :: TL.CmpSymbol x y :~: 'LT)) 
-       EQ -> Ex (SymbolEQ (trustMe :: TL.CmpSymbol x y :~: 'EQ)) 
-       GT -> Ex (SymbolGT (trustMe :: TL.CmpSymbol x y :~: 'GT)) 
+       LT -> SymbolLT (trustMe :: TL.CmpSymbol x y :~: 'LT) 
+       EQ -> SymbolEQ (trustMe :: TL.CmpSymbol x y :~: 'EQ) 
+       GT -> SymbolGT (trustMe :: TL.CmpSymbol x y :~: 'GT) 
 
 -- Nat 
 data instance SingT (y :: Nat) where 
@@ -184,9 +189,18 @@ instance Sing n => Sing ('S n) where sing = SS sing
 
 data Nat = Z | S Nat 
 
-eqNat :: SingT (n :: Nat) -> SingT m -> SingT (n == m) 
-eqNat SZ SZ = STrue 
--- eqNat SZ SZ 
+natVal :: forall x . Sing x => Proxy (x :: Nat) -> Integer 
+natVal _ = go (sing :: SingT x) where 
+  go :: SingT (a :: Nat) -> Integer 
+  go SZ = 0 
+  go (SS n) = 1 + go n 
+
+-- eqNat :: SingT (n :: Nat) -> SingT m -> SingT (n == m) 
+-- eqNat SZ SZ = STrue 
+-- eqNat (SS n) (SS m) = 
+--   case eqNat n m of 
+--     STrue -> _ 
+    -- SFalse -> SFalse 
 
 -- Inductive type literals 
 
@@ -256,10 +270,9 @@ lookupRec :: forall (xs :: [RecLabel Symbol b]) (nm :: Symbol) (r :: b) . (Looku
 lookupRec PNil x = x `seq` error "lookupSing: impossible" 
 lookupRec (PCons (SRecLabel nm ty) rest) nm' = 
   case compareSymbol' nm nm' of 
-    Ex q | SymbolEQ Refl <- q -> ty 
-         | SymbolLT Refl <- q -> lookupRec rest nm' 
-         | SymbolGT Refl <- q -> lookupRec rest nm' 
-    _ -> error "lookupRec:impossible" 
+    SymbolEQ Refl -> ty 
+    SymbolLT Refl -> lookupRec rest nm' 
+    SymbolGT Refl -> lookupRec rest nm' 
 
         
 -- List
@@ -277,8 +290,10 @@ data instance SingT (x :: [k]) where
 type ListSing = (SingT :: [k] -> *) 
 instance All Sing xs => Sing xs where sing = prod2sing $ mkProdC (Proxy :: Proxy Sing) sing 
 
-instance DecideEq (SingT :: [k] -> *) where 
+instance (DecideEq (SingT :: k -> *)) => DecideEq (SingT :: [k] -> *) where 
   SNil %== SNil = Just Refl 
+  SCons x xs %== SCons y ys = liftA2 (cong2 Refl) (x %== y) (xs %== ys) 
+  _ %== _ = Nothing 
 
 -- Type level if. Note that this is STRICT 
 type family If (a :: Bool) (x :: k)(y :: k) :: k where 

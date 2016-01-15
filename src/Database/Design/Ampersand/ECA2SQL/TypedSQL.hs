@@ -155,7 +155,7 @@ data TableSpec t where
 
 -- Safely create a table spec. 
 tableSpec :: NonEmpty x => Name -> Prod SingT x -> TableSpec x 
-tableSpec tn ty@PCons{} = MkTableSpec $ withSingT (SSQLRow $ prod2sing ty) $ Ref_ tn 
+tableSpec tn ty@PCons{} = MkTableSpec $ withSingT (SSQLRow $ prod2sing ty) $ const $ Ref_ tn 
 tableSpec _ PNil = error "tableSpec: impossible"
 
 -- When the types and the shape, but not the names are known at runtime. The type of this is hideous
