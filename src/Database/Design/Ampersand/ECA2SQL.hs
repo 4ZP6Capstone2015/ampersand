@@ -23,6 +23,7 @@ import Database.Design.Ampersand.Basics (Named(..))
 import Database.Design.Ampersand.Core.ParseTree (makePSingleton)
 import Database.Design.Ampersand.ECA2SQL.Utils  
 import Database.Design.Ampersand.ECA2SQL.TypedSQL 
+import qualified Database.Design.Ampersand.ECA2SQL.TSQLCombinators as T 
 import qualified GHC.TypeLits as TL 
 
 -- TODO: Pretty printer for SQL statements
@@ -76,32 +77,37 @@ import qualified GHC.TypeLits as TL
 
 -- Convert a declaration to a table specification.
 -- Based on Database.Design.Ampersand.FSpec.SQL.selectDeclaration
-decl2TableSpec :: FSpec -> Declaration -> Exists TableSpec 
+
+decl2TableSpec :: FSpec -> Declaration 
+               -> (forall (ks :: [RecLabel Symbol SQLType]) . Dict (NonEmpty ks) 
+                   -> RecAssocs ks :~: '[ 'SQLAtom, 'SQLAtom ] 
+                   -> TableSpec ks 
+                   -> r) -> r  
+-- The output type is isomorphic to 
+--   exists ks . RecAssocs ks ~ '[ SQLAtom, 'SQAtom ] => TableSpec ks 
+
 decl2TableSpec fSpec decl = 
   let (plug,src,tgt) = 
         case decl of 
           Sgn{} -> getDeclarationTableInfo fSpec decl 
           Isn{} -> let (p,a) = getConceptTableInfo fSpec (detyp decl) in (p,a,a)
           Vs{}  -> error "decl2TableSpec: V[_,_] not expected here"
-  in someTableSpec (QName $ name plug) [ (name src, Ex SSQLAtom), (name tgt, Ex SSQLAtom) ] 
+  in someTableSpecShape (QName $ name plug) (PCons (K (name src) :*: SSQLAtom) $ PCons (K (name tgt) :*: SSQLAtom) PNil)
 
 -- TODO: This function could do with some comments 
 -- TODO: Test eca2SQL
 -- TODO: Properly deal with the delta.. this will almost certainly not work.
 -- TODO: Add an option to the ampersand executable which will print all of the 
 --       eca rules and their corresponding SQL methods to stderr. 
+
 eca2SQL :: FSpec -> ECArule -> SQLMethod '[] 'SQLBool
-eca2SQL fSpec@FSpec{originalContext,plugInfos} (ECA _ delta action _) = undefined 
-
- -- SQLMethod [Name deltaNm] $ 
- --  NewRef SQLBool (Just "checkDone") (Just sqlFalse) :>>= \nm -> 
- --  paClause2SQL action nm :>>= \_ -> 
- --  SQLRet (Iden [nm])
+eca2SQL fSpec@FSpec{originalContext,plugInfos} (ECA _ delta action _) =  
+  MkSQLMethod $ \PNil -> 
+    NewRef SSQLBool (Just "checkDone") (Just T.false) :>>= \checkDone -> 
+    paClause2SQL action checkDone :>>= \_ -> 
+    SQLRet (deref checkDone)
   
-
-{-
-
-    where 
+      where 
         -- TODO: Figure out how this plug stuff works... 
         deltaObj = Obj 
           { objnm = name delta, objpos = OriginUnknown, objctx = EDcD delta
@@ -111,19 +117,42 @@ eca2SQL fSpec@FSpec{originalContext,plugInfos} (ECA _ delta action _) = undefine
         deltaPlug = makeUserDefinedSqlPlug originalContext deltaObj
         fSpec' = fSpec { plugInfos = InternalPlug deltaPlug : plugInfos } 
         expr2SQL' = expr2SQL fSpec'             -- calling expr2SQL function from SQL.hs
-                                                -- returns a QueryExpr (for a select query)    
-        done = \r -> SetRef r sqlTrue 
+                                                -- returns a QueryExpr (for a select query)  
+  
+        done = \r -> SetRef r T.true  
         notDone = const SQLNoop
-        
+
         deltaNm = case delta of 
                     Sgn{} -> decnm delta        -- returns the name of the declaration 
                     _ -> error "eca2SQL: Got a delta which is not a parameter"
-      
-        paClause2SQL :: PAclause -> (Name -> SQLStatement ())
-        paClause2SQL (Do Ins insInto toIns _motive) = \k ->                 -- PAClause case of Insert
-          Insert (decl2TableSpec fSpec insInto) (expr2SQL' toIns) :>>=      -- Insert :: TableSpec -> QueryExpr -> SQLStatement ()  
-          const (done k)                                                    -- decl2TableSpec = fetch table specification
-                                                                            -- expr2SQL = calls expr2SQL from SQL.hs, returns a QueryExpr for the toIns (Expression)
+        
+        paClause2SQL :: PAclause -> (SQLValRef 'SQLBool -> SQLStatement 'SQLUnit)
+
+        paClause2SQL (Do Ins insInto toIns _motive) = \k ->                    -- PAClause case of Insert
+          decl2TableSpec fSpec insInto $ \case { Dict -> \case { Refl -> \tbl -> 
+          withSingT (typeOfSem $ getTableSpec tbl) $                           -- Proof for unsafeSQLValFromQuery
+          Insert tbl (unsafeSQLValFromQuery $ expr2SQL' toIns) :>>=            -- Insert :: TableSpec -> QueryExpr -> SQLStatement ()  
+          const (done k)                                                       -- decl2TableSpec = fetch table specification
+          }}                                                                   -- expr2SQL = calls expr2SQL from SQL.hs, returns a QueryExpr for the toIns (Expression)
+
+
+        paClause2SQL (Nop _motive) = done                                   -- PAClause case of Nop
+        paClause2SQL (Blk _motive) = notDone                                -- PAClause case of Blk
+                                                                            -- tells which expression from whichule has caused the blockage
+                                                                            -- Ideally this case won't be reached in our project
+
+
+        -- paClause2SQL (CHC ps _motive) = \k ->                               -- PAClause case of CHC; ps is the precisely one clause to be executed
+        --   NewRef SQLBool (Just "checkDone") (Just sqlFalse) :>>= \checkDone -> 
+        --   let fin = SetRef k (BinOp (Iden [k]) ["OR"] (Iden [checkDone])) in
+        --   foldl (\doPs p -> paClause2SQL p checkDone :>>= \_ -> 
+        --                     IfSQL (Iden [checkDone]) SQLNoop doPs 
+        --          ) fin ps 
+
+{-
+
+    where 
+     
       
         paClause2SQL (Do Del delFrom toDel _motive) =                       -- PAClause case of Delete
           let sp@TableSpec{tableColumns = [src, tgt]} = decl2TableSpec fSpec delFrom
@@ -134,17 +163,7 @@ eca2SQL fSpec@FSpec{originalContext,plugInfos} (ECA _ delta action _) = undefine
               cond = BinOp (In True srcE $ InQueryExpr dom) ["AND"] (In True tgtE $ InQueryExpr cod)
           in \k -> Delete sp cond :>>= const (done k)
              
-        paClause2SQL (Nop _motive) = done                                   -- PAClause case of Nop
-        paClause2SQL (Blk _motive) = notDone                                -- PAClause case of Blk
-                                                                            -- tells which expression from whichule has caused the blockage
-                                                                            -- Ideally this case won't be reached in our project
 
-        paClause2SQL (CHC ps _motive) = \k ->                               -- PAClause case of CHC; ps is the precisely one clause to be executed
-          NewRef SQLBool (Just "checkDone") (Just sqlFalse) :>>= \checkDone -> 
-          let fin = SetRef k (BinOp (Iden [k]) ["OR"] (Iden [checkDone])) in
-          foldl (\doPs p -> paClause2SQL p checkDone :>>= \_ -> 
-                            IfSQL (Iden [checkDone]) SQLNoop doPs 
-                 ) fin ps 
           
         paClause2SQL (ALL ps _motive) = \k ->                               -- PAClause case of ALL; all PAClauses are executed
           NewRef SQLBool (Just "checkDone") Nothing :>>= \checkDone -> 
@@ -175,3 +194,4 @@ eca2SQL fSpec@FSpec{originalContext,plugInfos} (ECA _ delta action _) = undefine
                    -- throws an error at `Let' - so what the hell does it actually do?
         -}
 -}
+

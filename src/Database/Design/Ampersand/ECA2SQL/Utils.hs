@@ -148,6 +148,8 @@ instance ValueSing ('KProxy :: KProxy Symbol) where
   sing2val (SSymbol x) = TL.symbolVal x 
   val2sing _ str = case TL.someSymbolVal str of { TL.SomeSymbol x -> Ex (SSymbol x) } 
 
+symbolKindProxy = Proxy :: Proxy ('KProxy :: KProxy Symbol)
+
 -- Nat 
 data instance SingT (y :: Nat) where 
   SZ :: SingT 'Z 

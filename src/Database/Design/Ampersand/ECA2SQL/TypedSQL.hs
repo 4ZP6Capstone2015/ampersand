@@ -81,11 +81,11 @@ type family IsScalarType (x :: k) :: Bool where
 isScalarType :: SingT (x :: SQLType) -> SingT (IsScalarType x)
 isScalarType SSQLAtom = STrue 
 isScalarType SSQLBool = STrue 
-isScalarType (SSQLVec vs0) = SFalse {-
+isScalarType (SSQLVec _vs0) = SFalse {-
   case vs0 of 
     PNil -> STrue
     PCons v vs ->  isScalarType v |&& isScalarType (SSQLVec vs) -} 
-isScalarType ((SSQLRow ts0)) = SFalse {-
+isScalarType ((SSQLRow _ts0)) = SFalse {-
   case ts0 of 
     PCons (SRecLabel _ t) PNil       -> 
       case isScalarType t of 
@@ -96,8 +96,8 @@ isScalarType ((SSQLRow ts0)) = SFalse {-
 isScalarType (SSQLRel _) = SFalse   
 
 -- Singletons for SQLType 
-instance (All Sing xs, NonEmpty xs) => Sing ('SQLRow xs) where sing = SSQLRow (mkProdC (Proxy :: Proxy Sing) sing) 
-instance (All Sing xs) => Sing ('SQLVec xs) where sing = SSQLVec (mkProdC (Proxy :: Proxy Sing) sing) 
+instance (Sing xs, NonEmpty xs) => Sing ('SQLRow xs) where sing = SSQLRow (getSList sing)
+instance (Sing xs) => Sing ('SQLVec xs) where sing = SSQLVec (getSList sing)
 instance (Sing x) => Sing ('SQLRel x) where sing = SSQLRel sing 
 instance Sing 'SQLAtom where sing = SSQLAtom 
 instance Sing 'SQLBool where sing = SSQLBool 
@@ -112,18 +112,18 @@ typeOf :: SQLVal a -> SingT a
 typeOf SQLScalarVal{} = sing 
 typeOf SQLQueryVal{} = sing 
 
--- Semantics in the interpreter 
+-- Semantics in the interpreter. Underscores mark unsafe ctrs. 
 data SQLValSem (x :: SQLRefType) where 
   Unit :: SQLValSem 'SQLUnit
   Method_ :: (Sing args, Sing out) => Name -> SQLValSem ('SQLMethod args out) 
   Ref_ :: Sing x => Name -> SQLValSem ('SQLRef x) 
-  Val_ :: SQLVal x -> SQLValSem ('Ty x) 
+  Val :: SQLVal x -> SQLValSem ('Ty x) 
 
 -- Get the sql type of a semantic value which represens a value or reference
 -- to an actual type. 
 typeOfSem :: (f `IsElem` '[ 'SQLRef, 'Ty ]) => SQLValSem (f x) -> SQLTypeS x 
 typeOfSem Ref_{} = sing 
-typeOfSem (Val_ x) = typeOf x 
+typeOfSem (Val x) = typeOf x 
 typeOfSem x = x `seq` error "typeOfSem: impossible" 
   
 -- A SQLValRef is a reference to a sql value in the domain of the semantic interpretation. 
@@ -136,6 +136,11 @@ unsafeSqlValFromName :: forall x . Sing x => Name -> SQLVal x
 unsafeSqlValFromName nm = case isScalarType (sing :: SingT x) of 
                             STrue -> SQLScalarVal $ Iden [nm] 
                             SFalse -> SQLQueryVal $ Table [nm] 
+
+-- Unsafely generate a SQL value representing a query statement
+-- from an untype QueryExpr. 
+unsafeSQLValFromQuery :: forall xs . (NonEmpty xs, Sing ('SQLRel ('SQLRow xs))) => QueryExpr -> SQLVal ('SQLRel ('SQLRow xs))
+unsafeSQLValFromQuery = SQLQueryVal
 
 deref :: forall x . SQLValRef x -> SQLVal x 
 deref (Ref_ nm) = unsafeSqlValFromName nm 
@@ -168,10 +173,27 @@ tableSpec :: NonEmpty x => Name -> Prod SingT x -> TableSpec x
 tableSpec tn ty@PCons{} = MkTableSpec $ withSingT (SSQLRow ty) $ Ref_ tn 
 tableSpec _ PNil = error "tableSpec: impossible"
 
+-- When the types and the shape, but not the names are known at runtime. 
+someTableSpecShape :: NonEmpty (ts :: [SQLType]) => Name -> Prod (K String :*: SQLTypeS) ts 
+              -> (forall (ks :: [RecLabel Symbol SQLType]) . Dict (NonEmpty ks) -> RecAssocs ks :~: ts -> TableSpec ks -> r) 
+              -> r  -- Written with cps because expressing this with Exists is too hard..
+someTableSpecShape tn ts0 k0 = undefined {-  go ts0 (\q ps -> k0 q (tableSpec tn ps)) where 
+    go :: NonEmpty (ts :: [SQLType]) => Prod (K String :*: SQLTypeS) ts 
+       -> (forall (ks :: [RecLabel Symbol SQLType]) . (NonEmpty ks) => RecAssocs ks :~: ts -> Prod SingT ks -> r) 
+       -> r  
+    go PNil _ = error "someTableSpecShape:impossible"
+    go (PCons (K col :*: typ) PNil) k =  
+        val2sing symbolKindProxy col #>> \colNm -> k Refl (PCons (SRecLabel colNm typ) PNil)
+
+    go (PCons (K col :*: typ) ts@PCons{}) k = 
+        val2sing symbolKindProxy col #>> \colNm -> 
+          go ts $ \case { Refl -> \ts' ->
+           k Refl (PCons (SRecLabel colNm typ) ts')
+          }
+-}
 someTableSpec :: Name -> [(String, Exists SQLTypeS)] -> Exists TableSpec 
 someTableSpec tn cols =  
-  let symKP = Proxy :: Proxy ('KProxy :: KProxy Symbol)
-  in someProd (map (\(nm,Ex t) -> val2sing symKP nm #>> \nms -> Ex (nms `SRecLabel` t)) cols) 
+  someProd (map (\(nm,Ex t) -> val2sing symbolKindProxy nm #>> \nms -> Ex (nms `SRecLabel` t)) cols) 
      #>> \case { PNil -> error "someTableSpec: empty list"; q@PCons{} -> Ex . tableSpec tn $ q }
 
 data SQLMethod ts out where 
