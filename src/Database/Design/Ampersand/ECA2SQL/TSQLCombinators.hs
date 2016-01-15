@@ -1,55 +1,59 @@
 {-# LANGUAGE PatternSynonyms, NoMonomorphismRestriction, OverloadedStrings, LambdaCase, EmptyCase #-} 
 {-# LANGUAGE TemplateHaskell, QuasiQuotes, ScopedTypeVariables, PolyKinds, UndecidableInstances, DataKinds, DefaultSignatures #-}
-{-# OPTIONS -fno-warn-unticked-promoted-constructors -fno-warn-incomplete-patterns #-} 
+{-# OPTIONS -fno-warn-unticked-promoted-constructors #-} 
 
 module Database.Design.Ampersand.ECA2SQL.TSQLCombinators
   ( module Database.Design.Ampersand.ECA2SQL.TSQLCombinators
   ) where 
 
-import Database.Design.Ampersand.ECA2SQL.TypedSQL 
+import Database.Design.Ampersand.ECA2SQL.TypedSQL hiding (In)  
 import Database.Design.Ampersand.ECA2SQL.Utils 
 import qualified Language.SQL.SimpleSQL.Syntax as Sm 
-import Prelude (Maybe(..), error, (.), id, undefined, ($), Bool(..)) -- This module is intended to be imported qualified
+import Prelude (Maybe(..), error, (.), id, undefined, ($), Bool(..), String, (++)) -- This module is intended to be imported qualified
 import Control.Applicative (Applicative(..), (<$>))
 import qualified GHC.TypeLits as TL 
 
 true :: SQLVal 'SQLBool
-true = SQLScalarVal $ Sm.In True (Sm.NumLit "0") $ Sm.InList [Sm.NumLit "0"]
+true = sql PTrue 
 
 false :: SQLVal 'SQLBool
-false = SQLScalarVal $ Sm.In True (Sm.NumLit "1") $ Sm.InList [Sm.NumLit "0"]
+false = sql PFalse 
 
 not :: SQLVal 'SQLBool -> SQLVal 'SQLBool
-not (SQLScalarVal x) = SQLScalarVal $ Sm.PrefixOp ["NOT"] x 
+not = sql Not 
 
-in_, notIn :: forall a . (IsScalarType a ~ True) => SQLVal a -> SQLVal ('SQLRel a) -> SQLVal 'SQLBool
-in_ (SQLScalarVal x) (SQLQueryVal y) = SQLScalarVal $ Sm.In True x (Sm.InQueryExpr y) 
-notIn (SQLScalarVal x) (SQLQueryVal y) = SQLScalarVal $ Sm.In False x (Sm.InQueryExpr y) 
-
-{-
-type family ProjRows (xs :: [RecLabel Symbol SQLType]) :: [RecLabel Symbol SQLType] where 
-  ProjRows '[] = '[] 
-  ProjRows ((nm ::: ty) ': ts) = (nm ::: 'SQLRel ty) ': ProjRows ts 
-
--- Prooj obligations... ugh. I would really love to replace this with `unsafeCoerce'.
-proj_is_vtr :: forall (ts :: [RecLabel Symbol SQLType]) . (NonEmpty ts) => Prod SingT ts
-            -> (Prod SingT (ProjRows ts), Dict (NonEmpty (ProjRows ts)))
-proj_is_vtr (PCons (SRecLabel nm x) PNil) = (PCons (SRecLabel nm (SSQLRel x)) PNil , Dict)
-proj_is_vtr (PCons (SRecLabel nm x) xs@PCons{}) =
-  case proj_is_vtr xs of
-    (pr, Dict) -> (PCons (SRecLabel nm $ SSQLRel x) pr, Dict)
-
-proj_is_vtr _ = error "proj_is_vtr:impossible"
--}
+in_, notIn :: forall a . SQLVal a -> SQLVal ('SQLRel a) -> SQLVal 'SQLBool
+in_ = sql In; notIn = sql NotIn 
 
 -- Indexing. Overloaded operator with typeclasses. 
-
 class IndexInto (t :: SQLType) (indexk :: KProxy index) | t -> indexk where 
   type GetAtIndex t (i :: index) :: SQLType 
-  (!) :: SQLVal t -> SingT i -> SQLVal (GetAtIndex t i)  
+  (!) :: forall (i :: index) . SQLVal t -> SingT i -> SQLVal (GetAtIndex t i)  
 
 instance IndexInto ('SQLRow xs) ('KProxy :: KProxy Symbol) where 
   type GetAtIndex ('SQLRow xs) (nm :: Symbol) = Lookup xs nm 
+
+  (!) v@(SQLQueryVal x) i@(SSymbol pri) = 
+    let strNm = Sm.Name $ TL.symbolVal pri in 
+    case typeOf v of { SSQLRow t -> 
+    case lookupRec t i of { r -> 
+    withSingT r $ 
+      case isScalarType r of 
+        STrue -> SQLScalarVal $ 
+          case x of 
+            Sm.Table ns -> Sm.Iden (ns++[strNm])
+            _ -> Sm.SubQueryExpr Sm.SqSq $ Sm.makeSelect 
+                   { qeSetQuantifier = Sm.All 
+                   , qeSelectList    = [ (Sm.Iden [strNm], Nothing) ] 
+                   , qeFrom          = [ Sm.TRQueryExpr x ]
+                   } 
+        SFalse -> SQLQueryVal $ Sm.makeSelect 
+                   { qeSetQuantifier = Sm.All 
+                   , qeSelectList    = [ (Sm.Iden [strNm], Nothing) ] 
+                   , qeFrom          = [ Sm.TRQueryExpr x ]
+                   } 
+     }}
+  (!) _ _ = error "IndexInto{SQLRow}(!):impossible"
 
 instance IndexInto ('SQLRel ('SQLRow xs)) ('KProxy :: KProxy Symbol) where 
   type GetAtIndex ('SQLRel ('SQLRow xs)) (nm :: Symbol) = 'SQLRel (Lookup xs nm)
@@ -57,14 +61,22 @@ instance IndexInto ('SQLRel ('SQLRow xs)) ('KProxy :: KProxy Symbol) where
 instance IndexInto ('SQLVec x) ('KProxy :: KProxy TL.Nat) where 
   type GetAtIndex ('SQLVec ts) (i :: TL.Nat) = Lookup ts i
 
+-- Primitive functions go here. This allows an implementation of SQL to be 
+-- as simple as a function of type the same as `primSQL'. 
+data PrimSQLFunction (args :: [SQLType]) (out :: SQLType) where 
+  PTrue, PFalse :: PrimSQLFunction '[] 'SQLBool 
+  Not :: PrimSQLFunction '[ 'SQLBool ] 'SQLBool
+  Or, And :: PrimSQLFunction '[ 'SQLBool, 'SQLBool ] 'SQLBool
+  In, NotIn :: PrimSQLFunction '[ a, 'SQLRel a ] 'SQLBool
 
+primSQL :: PrimSQLFunction args out -> Prod SQLVal args -> SQLVal out 
+primSQL PTrue = \PNil -> SQLScalarVal $ Sm.In True (Sm.NumLit "0") $ Sm.InList [Sm.NumLit "0"]
+primSQL PFalse = \PNil -> SQLScalarVal $ Sm.In True (Sm.NumLit "1") $ Sm.InList [Sm.NumLit "0"]
+primSQL Not = \(SQLScalarVal x :> PNil) -> SQLScalarVal $ Sm.PrefixOp ["NOT"] x 
+primSQL In = \(SQLScalarVal x :> SQLQueryVal y :> PNil) -> SQLScalarVal $ Sm.In True x (Sm.InQueryExpr y) 
+primSQL NotIn = \(SQLScalarVal x :> SQLQueryVal y :> PNil) -> SQLScalarVal $ Sm.In False x (Sm.InQueryExpr y) 
+primSQL Or = \(SQLScalarVal x :> SQLScalarVal y :> PNil) -> SQLScalarVal $ Sm.BinOp x ["OR"] y
+primSQL And = \(SQLScalarVal x :> SQLScalarVal y :> PNil) -> SQLScalarVal $ Sm.BinOp x ["AND"] y
 
-
-
-
--- (!) :: (Lookup xs nm ~ r) => SQLVal ('SQLRow xs) -> SingT nm -> SQLVal r
--- x ! t@(SSymbol tp) =  $ Sm.makeSelect 
---   { Sm.qeSelectList = [ (Sm.Iden [ Sm.Name $ symbolVal tp ], Nothing) ]
---   , Sm.qeFrom = [ Sm.TRQueryExpr $ primValOf x ]
---   , Sm.qeSetQuantifier = Sm.All 
---   } 
+sql :: (Uncurry SQLVal args out fun) => PrimSQLFunction args out -> fun 
+sql fun = uncurryN $ primSQL fun 

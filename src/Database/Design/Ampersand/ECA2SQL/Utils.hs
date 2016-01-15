@@ -30,6 +30,9 @@ data Prod (f :: k -> *) (xs :: [k]) where
   PNil :: Prod f '[] 
   PCons :: f x -> Prod f xs -> Prod f (x ': xs) 
 
+infixr 5 :> 
+pattern x :> xs = PCons x xs 
+
 someProd :: [Exists f] -> Exists (Prod f)
 someProd [] = Ex PNil 
 someProd (Ex x:xs) = someProd xs #>> Ex . PCons x
@@ -177,33 +180,6 @@ type family ToTL (n :: Nat) :: TL.Nat where
 data instance SingT (y :: TL.Nat) where 
   NatSingI :: (TL.KnownNat n) => Proxy n -> SingT n 
 
--- caseNat :: SingT n -> (forall k . IsoNat n k -> r) -> r 
--- caseNat = undefined -- (NatSingI n) k = undefined 
-  -- case TL.sameNat n (Proxy :: Proxy 0) of 
-  --   Just Refl -> k IsoZ 
-  --   Nothing   -> k (IsoS 
-
---   NatSingI :: (n ~ FromTL n', n' ~ ToTL n) => SingT n -> SingT n'
-
--- plus1Assoc :: forall n m . SingT n -> SingT m -> (n TL.+ (m TL.+ 1)) :~: ((n TL.+ m) TL.+ 1)
--- plus1Assoc n m = caseNat m (caseNat n go) where 
---   go :: forall k k' . IsoNat n k -> IsoNat m k' -> (n TL.+ (m TL.+ 1)) :~: ((n TL.+ m) TL.+ 1)
---   go (IsoS n) (IsoS m) = 
---     case plus1Assoc n m of 
---       Refl -> Refl 
-  --   case go n m of 
-  --     Refl -> _ 
-
-  -- caseNat n 
--- plus1Assoc (NatSingI (SS n)) (NatSingI (SS m)) = 
---   case plus1Assoc (NatSingI n) (NatSingI m) of 
---     r -> _ 
-
--- plus1Assoc :: SingT n -> SingT m -> (n TL.+ (m TL.+ 1)) :~: ((n TL.+ m) TL.+ 1)
--- plus1Assoc SZi SZi = Refl
--- plus1Assoc (SSi _) SZi = Refl 
--- plus1Assoc (SSi n) (SSi m) = case plus1Assoc n m of { r@Refl -> Refl } 
-
 -- BOOl
 data instance SingT (x :: Bool) where 
   STrue :: SingT 'True 
@@ -246,17 +222,16 @@ type family Lookup (xs :: [k0]) (x :: k1) :: k2 where
   Lookup ( x ': xs ) 0 = x 
   Lookup ( x ': xs ) n = Lookup xs (n TL.- 1)
 
-{-
-lookupSing :: (DecideEq (SingT :: a -> *), Lookup xs nm ~ r) => Prod SingT xs -> SingT (nm :: a) -> SingT r 
-lookupSing PNil _ = error "lookupSing: impossible" 
-lookupSing (PCons (SRecLabel nm ty) rest) nm' = 
+lookupRec :: forall (xs :: [RecLabel a b]) (nm :: a) (r :: b) . (DecideEq (SingT :: a -> *), Lookup xs nm ~ r) => Prod SingT xs -> SingT nm -> SingT r 
+lookupRec PNil _ = error "lookupSing: impossible" 
+lookupRec (PCons (SRecLabel nm ty) rest) nm' = 
   case nm %== nm' of 
     Just Refl -> ty 
     -- No clue how to write this properly.. the compiler can't tell that 
     --   nm /= nm'   =>   Lookup ( (nm ::: ty) : rest ) nm' == Lookup rest nm 
     -- because it doesn't know about the type inequality at all... 
-    Nothing -> unsafeCoerce $ lookupSing rest nm' 
--}
+    Nothing -> unsafeCoerce $ lookupRec rest nm' 
+
         
 -- List
 newtype instance SingT (x :: [k]) = MkSList { getSList :: Prod SingT x } 
@@ -282,3 +257,15 @@ if_ap (IfA f) (IfA a) = IfA $
   case sing :: SingT cond of 
     STrue -> f a 
     SFalse -> f a 
+
+
+-- uncurry
+
+class Uncurry f args o r | f args o -> r where 
+  uncurryN :: (Prod f args -> f o) -> r
+
+instance Uncurry f '[] o (f o) where 
+  uncurryN f = f PNil 
+
+instance Uncurry f args o r => Uncurry f (arg ': args) o (f arg -> r) where 
+  uncurryN f arg = uncurryN (f . PCons arg) 

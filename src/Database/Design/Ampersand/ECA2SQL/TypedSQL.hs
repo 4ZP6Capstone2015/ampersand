@@ -177,20 +177,19 @@ tableSpec _ PNil = error "tableSpec: impossible"
 someTableSpecShape :: NonEmpty (ts :: [SQLType]) => Name -> Prod (K String :*: SQLTypeS) ts 
               -> (forall (ks :: [RecLabel Symbol SQLType]) . Dict (NonEmpty ks) -> RecAssocs ks :~: ts -> TableSpec ks -> r) 
               -> r  -- Written with cps because expressing this with Exists is too hard..
-someTableSpecShape tn ts0 k0 = undefined {-  go ts0 (\q ps -> k0 q (tableSpec tn ps)) where 
+someTableSpecShape tn ts0 k0 = go ts0 (\q@Dict q' ps -> k0 q q' (tableSpec tn ps)) where 
     go :: NonEmpty (ts :: [SQLType]) => Prod (K String :*: SQLTypeS) ts 
-       -> (forall (ks :: [RecLabel Symbol SQLType]) . (NonEmpty ks) => RecAssocs ks :~: ts -> Prod SingT ks -> r) 
+       -> (forall (ks :: [RecLabel Symbol SQLType]) . Dict (NonEmpty ks) -> RecAssocs ks :~: ts -> Prod SingT ks -> r) 
        -> r  
     go PNil _ = error "someTableSpecShape:impossible"
     go (PCons (K col :*: typ) PNil) k =  
-        val2sing symbolKindProxy col #>> \colNm -> k Refl (PCons (SRecLabel colNm typ) PNil)
-
+        val2sing symbolKindProxy col #>> \colNm -> k Dict Refl (PCons (SRecLabel colNm typ) PNil)
     go (PCons (K col :*: typ) ts@PCons{}) k = 
         val2sing symbolKindProxy col #>> \colNm -> 
-          go ts $ \case { Refl -> \ts' ->
-           k Refl (PCons (SRecLabel colNm typ) ts')
-          }
--}
+          go ts $ \case { Dict -> \case { Refl -> \ts' ->
+           k Dict Refl (PCons (SRecLabel colNm typ) ts')
+          }}
+
 someTableSpec :: Name -> [(String, Exists SQLTypeS)] -> Exists TableSpec 
 someTableSpec tn cols =  
   someProd (map (\(nm,Ex t) -> val2sing symbolKindProxy nm #>> \nms -> Ex (nms `SRecLabel` t)) cols) 
@@ -216,10 +215,10 @@ data SQLSt (x :: SQLSem) (a :: SQLRefType) where
   -- Given a table and a query, insert those values into that table. Overloaded to work with both vectors and 
   -- tables. If the input is a table, it is implicitly casted to the shape of the table before insertion. 
 
-  Delete :: TableSpec ts -> SQLVal 'SQLBool -> SQLStatement 'SQLUnit 
+  Delete :: TableSpec ts -> (SQLVal ('SQLRow ts) -> SQLVal 'SQLBool) -> SQLStatement 'SQLUnit 
   -- Delete from a table those values specified by the predicate
  
-  Update :: TableSpec ts -> SQLVal 'SQLBool -> (SQLValRef ('SQLRow ts) -> SQLVal ('SQLRow ts)) -> SQLStatement 'SQLUnit 
+  Update :: TableSpec ts -> (SQLVal ('SQLRow ts) -> SQLVal 'SQLBool) -> (SQLVal ('SQLRow ts) -> SQLVal ('SQLRow ts)) -> SQLStatement 'SQLUnit 
   -- Same as above, this time taking two functions, the first is again the where
   -- clause, the 2nd computes the values to be updated. 
 
