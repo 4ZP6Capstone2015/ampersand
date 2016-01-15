@@ -59,6 +59,9 @@ instance IndexInto ('SQLVec x) ('KProxy :: KProxy TL.Nat) where
 
 
 
+
+
+
 -- (!) :: (Lookup xs nm ~ r) => SQLVal ('SQLRow xs) -> SingT nm -> SQLVal r
 -- x ! t@(SSymbol tp) =  $ Sm.makeSelect 
 --   { Sm.qeSelectList = [ (Sm.Iden [ Sm.Name $ symbolVal tp ], Nothing) ]

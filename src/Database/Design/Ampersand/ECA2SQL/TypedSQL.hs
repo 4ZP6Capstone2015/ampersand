@@ -174,10 +174,13 @@ someTableSpec tn cols =
   in someProd (map (\(nm,Ex t) -> val2sing symKP nm #>> \nms -> Ex (nms `SRecLabel` t)) cols) 
      #>> \case { PNil -> error "someTableSpec: empty list"; q@PCons{} -> Ex . tableSpec tn $ q }
 
--- A method with a set of input parameters. The function takes a vector of references
--- of those types.
 data SQLMethod ts out where 
-  MkSQLMethod :: Maybe String -> (Prod SQLVal ts -> SQLSt 'Mthd ('Ty out)) -> SQLMethod ts out 
+  MkSQLMethod :: (Prod (SQLValSem :.: 'SQLRef) ts -> SQLSt 'Mthd ('Ty out)) -> SQLMethod ts out 
+  -- A method with a set of input parameters. The function takes a vector of
+  -- references of those types.
+
+  SQLMethodWithFormalParams :: Prod (SQLValSem :.: 'SQLRef) ts -> SQLSt 'Mthd ('Ty out) -> SQLMethod ts out 
+  -- A method with formal parameters - using this is considered unsafe. 
 
 -- Used to distinguish sql methods from statements. The only difference 
 -- is that a method cannot be "sequenced" with `:>>='. Essentially this
@@ -225,6 +228,6 @@ data SQLSt (x :: SQLSem) (a :: SQLRefType) where
   -- Semantics. Only allowed for sql types. 
 
   SQLFunCall :: SQLMethodRef ts out -> Prod SQLVal ts -> SQLStatement ('Ty out) 
-  SQLDefunMethod :: SQLMethod ts out -> SQLStatement ('SQLMethod ts out)
+  SQLDefunMethod :: Maybe String -> SQLMethod ts out -> SQLStatement ('SQLMethod ts out)
   -- Methods 
 

@@ -10,7 +10,7 @@ import Database.Design.Ampersand.Core.AbstractSyntaxTree
   ( ECArule(..), PAclause(..), Expression(..), Declaration(..), AAtomValue(..), InsDel(..), Event(..)
   , A_Context(..), ObjectDef(..), ObjectDef(..), Origin(..), Cruds(..)
   )
-import Database.Design.Ampersand.FSpec (FSpec(..), SqlTType(..)) 
+import Database.Design.Ampersand.FSpec (FSpec(..)) 
 import Language.SQL.SimpleSQL.Syntax 
   ( QueryExpr(..), ValueExpr(..), Name(..), TableRef(..), InPredValue(..), SubQueryExprType(..) 
   , makeSelect
@@ -35,40 +35,40 @@ import qualified GHC.TypeLits as TL
 -- text :: String -> Doc -- converts a string to the corresponding document
 -- text concatText = case concatText of 
             -- (s ++ t) -> text s <> text table --homomorphism from string concat to doc concat, applied left to right
-	-- "" -> nil
+   -- "" -> nil
 -- line :: Doc --line break, assume string passed to text has no line break
 -- nest :: Int -> Doc -> Doc -- adds indentation to the document 
 -- nest nestText = case nestText of  -- homomorph from addition to composition, distri through concat
-	-- (i+j) x -> nest i (nest j x) -- applied left to right
-	-- 0 x -> x -- applied left to right 
-	-- (x <> y) -> nest i x <> nest i y -- applied right to left
-	-- i nil -> nil -- ""
-	-- i (text s) -> text s -- each law on a binary operator is paired with a corresponding law for its unit; right to left
+   -- (i+j) x -> nest i (nest j x) -- applied left to right
+   -- 0 x -> x -- applied left to right 
+   -- (x <> y) -> nest i x <> nest i y -- applied right to left
+   -- i nil -> nil -- ""
+   -- i (text s) -> text s -- each law on a binary operator is paired with a corresponding law for its unit; right to left
 -- layout :: Doc -> String --converts document to a string; identity function 
 -- layout layoutText = case layoutText of
-	-- (x <> y) -> layout x ++ layout y -- doc to string concat, layout is invert of text
-	-- nil -> ""
-	-- (text s) -> s
-	-- (nest i line) -> '\n' : copy i '' -- layout of nested line is a newline followed by no indentation for lining up at each level
+   -- (x <> y) -> layout x ++ layout y -- doc to string concat, layout is invert of text
+   -- nil -> ""
+   -- (text s) -> s
+   -- (nest i line) -> '\n' : copy i '' -- layout of nested line is a newline followed by no indentation for lining up at each level
 -- -- might want to take out tts and associated text
 -- showTree showTreeText = case showTreeText of
-	-- (Node s ts tts) -> text s <> nest (length s) (showBracket ts) <> nest (length s) (showBracket tts) -- can s = binSQLQuery (bceq0), ts = binSQLQuery (bceq1), or is s combineOp?
-	-- (Node s ts nil) -> group (text s <> nest (length s) (showBracket ts)) -- keep total less than i character (pretty::Int -> Doc -> String)
+   -- (Node s ts tts) -> text s <> nest (length s) (showBracket ts) <> nest (length s) (showBracket tts) -- can s = binSQLQuery (bceq0), ts = binSQLQuery (bceq1), or is s combineOp?
+   -- (Node s ts nil) -> group (text s <> nest (length s) (showBracket ts)) -- keep total less than i character (pretty::Int -> Doc -> String)
 -- showBracket stuff = 
-	-- case stuff of [] -> nil
-		-- ts -> text "INSERT INTO" <> nest 0 line showTrees ts <> text line "SELECT" <> nest 0 line showTree tts <> text line "FROM")
-		-- [t] -> showTree t
-		-- showTree (t:ts) -> showTree t <> line text "," <> showTree ts
-	
-	
+   -- case stuff of [] -> nil
+      -- ts -> text "INSERT INTO" <> nest 0 line showTrees ts <> text line "SELECT" <> nest 0 line showTree tts <> text line "FROM")
+      -- [t] -> showTree t
+      -- showTree (t:ts) -> showTree t <> line text "," <> showTree ts
+   
+   
 -- -- INSERT INTO <tgt>
 -- -- SELECT <src.col> --can this be binSQLQuery(bseSrc)? from SQL.hs
 -- -- FROM <src> WHERE <condition> -- where = binSQLQuery (bseWhr)?
 
 -- -- text "INSERT INTO <tgt>" <> 
-	-- -- nest 0 (
-		-- -- line <> text "SELECT <src.col>"
-		-- -- line <> text "FROM <src> " <> text "WHERE <condition>")
+   -- -- nest 0 (
+      -- -- line <> text "SELECT <src.col>"
+      -- -- line <> text "FROM <src> " <> text "WHERE <condition>")
 
 
 
@@ -77,48 +77,30 @@ import qualified GHC.TypeLits as TL
 -- Convert a declaration to a table specification.
 -- Based on Database.Design.Ampersand.FSpec.SQL.selectDeclaration
 decl2TableSpec :: FSpec -> Declaration -> Exists TableSpec 
-decl2TableSpec fSpec decl = undefined 
-  -- let (plug,src,tgt) = 
-  --       case decl of 
-  --         Sgn{} -> getDeclarationTableInfo fSpec decl 
-  --         Isn{} -> let (p,a) = getConceptTableInfo fSpec (detyp decl) in (p,a,a)
-  --         Vs{}  -> error "decl2TableSpec: V[_,_] not expected here"
-  -- in case TL.someSymbolVal (name src) of { (TL.SomeSymbol (srcT :: Proxy srcT)) ->  
-  --    case TL.someSymbolVal (name tgt) of { (TL.SomeSymbol (tgtT :: Proxy tgtT)) -> 
-  --       let r = withSingT (SSQLRel $ SSQLRow $ PCons (SRecLabel (SSymbol srcT) SSQLAtom) $ PCons (SRecLabel (SSymbol tgtTy) SSQLAtom) PNil) $ 
-  --               MkTableSpec $ Ref_ $ QName $ name plug
-  --           r :: TableSpec '[ srcT ::: 'SQLAtom, tgtT ::: 'SQLAtom ]
-  --       in Ex r
-  --    }}
-
--- Ex $ MkTableSpec $  
-
--- TableSpec (q plug) $ map q [src,tgt]
-
-{-
-
--- I really dont know if there is a better way in sql....
-sqlTrue, sqlFalse :: ValueExpr
-sqlTrue = BinOp (NumLit "0") ["="] (NumLit "0")
-sqlFalse = BinOp (NumLit "0") ["="] (NumLit "1")
--- is this NULL and NOT NULL for column values? 
-
-sqlNull :: ValueExpr 
-sqlNull = SpecialOp ["NULL"] []
-sqlNotNull = SpecialOp ["NOT NULL"] [] -- is the empty bracket suppose to be values allowed for the not null?
+decl2TableSpec fSpec decl = 
+  let (plug,src,tgt) = 
+        case decl of 
+          Sgn{} -> getDeclarationTableInfo fSpec decl 
+          Isn{} -> let (p,a) = getConceptTableInfo fSpec (detyp decl) in (p,a,a)
+          Vs{}  -> error "decl2TableSpec: V[_,_] not expected here"
+  in someTableSpec (QName $ name plug) [ (name src, Ex SSQLAtom), (name tgt, Ex SSQLAtom) ] 
 
 -- TODO: This function could do with some comments 
 -- TODO: Test eca2SQL
 -- TODO: Properly deal with the delta.. this will almost certainly not work.
 -- TODO: Add an option to the ampersand executable which will print all of the 
 --       eca rules and their corresponding SQL methods to stderr. 
-eca2SQL :: FSpec -> ECArule -> SQLMethod ValueExpr 
-eca2SQL fSpec@FSpec{originalContext,plugInfos} (ECA _ delta action _) = 
- SQLMethod "ecaRule" [Name deltaNm] $ 
-  NewRef SQLBool (Just "checkDone") (Just sqlFalse) :>>= \nm -> 
-  paClause2SQL action nm :>>= \_ -> 
-  SQLRet (Iden [nm])
+eca2SQL :: FSpec -> ECArule -> SQLMethod '[] 'SQLBool
+eca2SQL fSpec@FSpec{originalContext,plugInfos} (ECA _ delta action _) = undefined 
+
+ -- SQLMethod [Name deltaNm] $ 
+ --  NewRef SQLBool (Just "checkDone") (Just sqlFalse) :>>= \nm -> 
+ --  paClause2SQL action nm :>>= \_ -> 
+ --  SQLRet (Iden [nm])
   
+
+{-
+
     where 
         -- TODO: Figure out how this plug stuff works... 
         deltaObj = Obj 

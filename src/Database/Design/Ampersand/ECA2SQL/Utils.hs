@@ -83,8 +83,8 @@ data AppliedTo (x :: k) (f :: k -> *) where Ap :: f x -> x `AppliedTo` f
 data Flip (f :: k0 -> k1 -> *) (x :: k1) (y :: k0) where 
   Flp :: f y x -> Flip f x y
 
-data (:*:) (f :: k0 -> *) (g :: k1 -> *) (x :: (k0,k1)) where 
-  (:*:) :: f x -> g y -> (:*:) f g '(x , y)
+newtype (:.:) (f :: k1 -> *) (g :: k0 -> k1) x = Cmp { unCmp :: f (g x) }
+data (:*:) (f :: k0 -> *) (g :: k0 -> *) (x :: k0) = (:*:) (f x) (g x)
 newtype K a (x :: k) = K { unK :: a } 
 newtype Id a = Id { unId :: a } 
 
