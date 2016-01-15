@@ -68,6 +68,7 @@ data PrimSQLFunction (args :: [SQLType]) (out :: SQLType) where
   Not :: PrimSQLFunction '[ 'SQLBool ] 'SQLBool
   Or, And :: PrimSQLFunction '[ 'SQLBool, 'SQLBool ] 'SQLBool
   In, NotIn :: PrimSQLFunction '[ a, 'SQLRel a ] 'SQLBool
+  Exists :: PrimSQLFunction '[ 'SQLRel a ] 'SQLBool 
 
 primSQL :: PrimSQLFunction args out -> Prod SQLVal args -> SQLVal out 
 primSQL PTrue = \PNil -> SQLScalarVal $ Sm.In True (Sm.NumLit "0") $ Sm.InList [Sm.NumLit "0"]

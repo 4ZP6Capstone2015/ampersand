@@ -82,8 +82,8 @@ decl2TableSpec fSpec decl =
           Sgn{} -> getDeclarationTableInfo fSpec decl 
           Isn{} -> let (p,a) = getConceptTableInfo fSpec (detyp decl) in (p,a,a)
           Vs{}  -> error "decl2TableSpec: V[_,_] not expected here"
-  in someTableSpecShape (QName $ name plug) (PCons (K (name src) :*: SSQLAtom) $ PCons (K (name tgt) :*: SSQLAtom) PNil) $ \tbl -> 
-     _ 
+  in someTableSpecShape (QName $ name plug) (PCons (K (name src) :*: SSQLAtom) $ PCons (K (name tgt) :*: SSQLAtom) PNil) $
+      \case { Dict -> \case { Refl -> \tbl -> TableAlias tbl }}
 
 -- TODO: This function could do with some comments 
 -- TODO: Test eca2SQL
@@ -114,7 +114,7 @@ eca2SQL fSpec@FSpec{originalContext,plugInfos} (ECA _ delta action _) =
         notDone = const SQLNoop
 
         -- TODO: Do something with the delta?
-        deltaNm = case delta of 
+        _deltaNm = case delta of 
                     Sgn{} -> decnm delta        -- returns the name of the declaration 
                     _ -> error "eca2SQL: Got a delta which is not a parameter"
         
@@ -151,43 +151,32 @@ eca2SQL fSpec@FSpec{originalContext,plugInfos} (ECA _ delta action _) =
               tgt = sing :: SingT "tgt" 
               dom = toDelExpr T.! src 
               cod = toDelExpr T.! tgt 
-              cond = \tup -> T.sql T.And (T.in_ (tup T.! src) dom) (T.in_ (tup T.! tgt) dom)
+              cond = \tup -> T.sql T.And (T.in_ (tup T.! src) dom) (T.in_ (tup T.! tgt) cod)
           in \k -> Delete tbl cond :>>= const (done k) 
            
-
-   
-{-
-          let sp@TableSpec{tableColumns = [src, tgt]} = decl2TableSpec fSpec delFrom
-              srcE = Iden [src]; tgtE = Iden [tgt] 
-              fromDelta = makeSelect { qeFrom = [ TRQueryExpr $ expr2SQL' toDel ] }
-              dom = fromDelta { qeSelectList = [(srcE, Nothing)] }
-              cod = fromDelta { qeSelectList = [(tgtE, Nothing)] }
-              cond = BinOp (In True srcE $ InQueryExpr dom) ["AND"] (In True tgtE $ InQueryExpr cod)
-          in \k -> Delete sp cond :>>= const (done k)
-             
-
-       
-
-    where 
-     
         paClause2SQL (ALL ps _motive) = \k ->                               -- PAClause case of ALL; all PAClauses are executed
-          NewRef SQLBool (Just "checkDone") Nothing :>>= \checkDone -> 
-          foldl (\doPs p -> SetRef checkDone sqlFalse :>>= \_ ->            -- sequential execution of all PAClauses
+          NewRef SSQLBool (Just "checkDone") Nothing :>>= \checkDone -> 
+          foldl (\doPs p -> SetRef checkDone T.false :>>= \_ ->            -- sequential execution of all PAClauses
                             paClause2SQL p checkDone :>>= \_ -> 
-                            IfSQL (Iden [checkDone]) doPs SQLNoop
-                ) (SetRef k (Iden[checkDone])) ps 
-
+                            IfSQL (deref checkDone) doPs SQLNoop
+                ) (SetRef k (deref checkDone)) ps 
+     
+        -- guarded choice; The rule is maintained if one of the clauses of which the expression is populated is executed.
         paClause2SQL (GCH ps _motive) = \k ->                                    -- PAClause case of GHC
-          NewRef SQLBool (Just "checkDone") (Just sqlFalse) :>>= \checkDone ->   -- guarded choice; The rule is maintained if one of the clauses of which the expression is populated is executed.
-          let fin = SetRef k (BinOp (Iden [k]) ["OR"] (Iden [checkDone])) in
+          NewRef SSQLBool (Just "checkDone") (Just T.false) :>>= \checkDone ->  
+          let fin = SetRef k (T.sql T.Or (deref checkDone) (deref k)) in
           foldl (\doPs (neg, gr, p) -> 
-                   let nneg = case neg of { Ins -> id; Del -> PrefixOp ["NOT"] } in 
-                   IfSQL (nneg $ SubQueryExpr SqExists $ expr2SQL' gr) 
+                   let nneg = case neg of { Ins -> id; Del -> T.sql T.Not } 
+                       guardExpr = unsafeSQLValFromQuery $ expr2SQL' gr
+                       guardExpr :: SQLVal ('SQLRel ('SQLRow '[ "dummy" ::: 'SQLAtom ]))
+                       -- we don't actually know the type of the guard expression, other than it is a relation.
+                   in 
+                   IfSQL (nneg $ T.sql T.Exists guardExpr) 
                      (paClause2SQL p checkDone :>>= \_ -> 
-                      IfSQL (Iden [checkDone]) SQLNoop doPs
+                      IfSQL (deref checkDone) SQLNoop doPs
                      ) doPs
                  ) fin ps 
-
+      
         paClause2SQL _ = error "paClause2SQL: unsupported operation" 
         {- 
         paClause2SQL (Let expr body _motive) = ???
@@ -198,5 +187,4 @@ eca2SQL fSpec@FSpec{originalContext,plugInfos} (ECA _ delta action _) =
                    -- No clue. Need to clarify what this actually does. Every single function in all of ampersand 
                    -- throws an error at `Let' - so what the hell does it actually do?
         -}
--}
 

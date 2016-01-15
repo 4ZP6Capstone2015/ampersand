@@ -166,7 +166,9 @@ instance (DecideEq (SingT :: k0 -> *), DecideEq (SingT :: k1 -> *)) => DecideEq 
 
 -- The specification of a table is a reference to a relation on rows 
 -- of the table type. 
-newtype TableSpec t = MkTableSpec { getTableSpec :: SQLValRef ('SQLRel ('SQLRow t)) }
+data TableSpec t where 
+  MkTableSpec :: { getTableSpec :: SQLValRef ('SQLRel ('SQLRow t)) } -> TableSpec t
+  TableAlias  :: (RecAssocs t0 ~ RecAssocs t1) => TableSpec t0 -> TableSpec t1 
 
 -- Safely create a table spec. 
 tableSpec :: NonEmpty x => Name -> Prod SingT x -> TableSpec x 
