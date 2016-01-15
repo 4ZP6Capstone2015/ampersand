@@ -98,6 +98,7 @@ isScalarType (SSQLRel _) = SFalse
 -- Singletons for SQLType 
 instance (All Sing xs, NonEmpty xs) => Sing ('SQLRow xs) where sing = SSQLRow (mkProdC (Proxy :: Proxy Sing) sing) 
 instance (All Sing xs) => Sing ('SQLVec xs) where sing = SSQLVec (mkProdC (Proxy :: Proxy Sing) sing) 
+instance (Sing x) => Sing ('SQLRel x) where sing = SSQLRel sing 
 instance Sing 'SQLAtom where sing = SSQLAtom 
 instance Sing 'SQLBool where sing = SSQLBool 
 
@@ -117,6 +118,13 @@ data SQLValSem (x :: SQLRefType) where
   Method_ :: (Sing args, Sing out) => Name -> SQLValSem ('SQLMethod args out) 
   Ref_ :: Sing x => Name -> SQLValSem ('SQLRef x) 
   Val_ :: SQLVal x -> SQLValSem ('Ty x) 
+
+-- Get the sql type of a semantic value which represens a value or reference
+-- to an actual type. 
+typeOfSem :: (f `IsElem` '[ 'SQLRef, 'Ty ]) => SQLValSem (f x) -> SQLTypeS x 
+typeOfSem Ref_{} = sing 
+typeOfSem (Val_ x) = typeOf x 
+typeOfSem x = x `seq` error "typeOfSem: impossible" 
   
 -- A SQLValRef is a reference to a sql value in the domain of the semantic interpretation. 
 type SQLValRef x = SQLValSem ('SQLRef x)
@@ -153,7 +161,18 @@ instance (DecideEq (SingT :: k0 -> *), DecideEq (SingT :: k1 -> *)) => DecideEq 
 
 -- The specification of a table is a reference to a relation on rows 
 -- of the table type. 
-type TableSpec t = SQLValRef ('SQLRel ('SQLRow t))
+newtype TableSpec t = MkTableSpec { getTableSpec :: SQLValRef ('SQLRel ('SQLRow t)) }
+
+-- Safely create a table spec. 
+tableSpec :: NonEmpty x => Name -> Prod SingT x -> TableSpec x 
+tableSpec tn ty@PCons{} = MkTableSpec $ withSingT (SSQLRow ty) $ Ref_ tn 
+tableSpec _ PNil = error "tableSpec: impossible"
+
+someTableSpec :: Name -> [(String, Exists SQLTypeS)] -> Exists TableSpec 
+someTableSpec tn cols =  
+  let symKP = Proxy :: Proxy ('KProxy :: KProxy Symbol)
+  in someProd (map (\(nm,Ex t) -> val2sing symKP nm #>> \nms -> Ex (nms `SRecLabel` t)) cols) 
+     #>> \case { PNil -> error "someTableSpec: empty list"; q@PCons{} -> Ex . tableSpec tn $ q }
 
 -- A method with a set of input parameters. The function takes a vector of references
 -- of those types.

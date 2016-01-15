@@ -1,4 +1,5 @@
-{-# LANGUAGE PatternSynonyms, NoMonomorphismRestriction, OverloadedStrings, LambdaCase, RoleAnnotations #-} 
+{-# LANGUAGE PatternSynonyms, NoMonomorphismRestriction, OverloadedStrings, LambdaCase, RoleAnnotations, LiberalTypeSynonyms #-} 
+{-# LANGUAGE ScopedTypeVariables #-} 
 {-# OPTIONS -fno-warn-unticked-promoted-constructors #-} 
 
 module Database.Design.Ampersand.ECA2SQL 
@@ -20,63 +21,9 @@ import Database.Design.Ampersand.FSpec.SQL (expr2SQL,prettySQLQuery) --added Bin
 import Database.Design.Ampersand.FSpec.FSpecAux (getDeclarationTableInfo,getConceptTableInfo)
 import Database.Design.Ampersand.Basics (Named(..))
 import Database.Design.Ampersand.Core.ParseTree (makePSingleton)
-import Database.Design.Ampersand.ECA2SQL.Utils  () 
-
--- A specification of a table contains the name of that table and all of its columns.
-data TableSpec = TableSpec 
-  { tableName :: Name 
-  , tableColumns :: [Name] 
-  } 
-
--- A type representing table expressions composed of ampersand values. 
-data TableValue = TableValue { columnAliases :: [ Maybe Name ], tableRows :: [ [AAtomValue] ] } 
-
-data RowValue a = RowValue { getRowValue :: [ (Maybe Name, a) ] } 
-
--- A type represeting a vector of values. 
-newtype VectorValue a = VectorValue { getVectorValue :: [a] }
-
--- Used to distinguish sql methods from statements. The only difference 
--- is that a method cannot be "sequenced" with `:>>='. Essentially this
--- allows us to define 
-data SQLSem = Stmt | Mthd 
-
-type SQLStatement = SQLSt 'Stmt
-
--- TODO: Mock database which runs SQL statements
-data SQLMethod a = SQLMethod 
-  { mtdName :: Name 
-  , mtdParams :: [Name] 
-  , mtdBody :: SQLSt 'Mthd a 
-  }
-
-type role SQLMethod nominal 
-newtype SQLMethodName a = MthdName { getMthdName :: Name }
-
--- Types which can be interpretted in the domain of sql expressions 
-data SQLType a where 
-  -- Expression types 
-  SQLRef    :: SQLType Name
-  SQLMthd   :: SQLType a -> SQLType (SQLMethodName a) 
-  SQLGRef   :: SQLType ValueExpr
-
-  -- Values types
-  SQLScalar :: SQLType AAtomValue 
-  SQLTable  :: SQLType TableValue
-  SQLUnit   :: SQLType () 
-  SQLVec    :: SQLType a -> SQLType (VectorValue a)
-  SQLRow    :: SQLType a -> SQLType (RowValue a) 
-
-class IsSQLType a where sqlType :: SQLType a 
-instance IsSQLType Name where sqlType = SQLRef
-instance IsSQLType ValueExpr where sqlType = SQLGRef  
-
-instance IsSQLType AAtomValue where sqlType = SQLScalar  
-instance IsSQLType TableValue where sqlType = SQLTable
-instance IsSQLType () where sqlType = SQLUnit    
-instance IsSQLType a => IsSQLType (VectorValue a) where sqlType = SQLVec sqlType   
-instance IsSQLType a => IsSQLType (RowValue a) where sqlType = SQLRow sqlType
-
+import Database.Design.Ampersand.ECA2SQL.Utils  
+import Database.Design.Ampersand.ECA2SQL.TypedSQL 
+import qualified GHC.TypeLits as TL 
 
 -- TODO: Pretty printer for SQL statements
 
@@ -126,54 +73,29 @@ instance IsSQLType a => IsSQLType (RowValue a) where sqlType = SQLRow sqlType
 
 
 
-data SQLSt (x :: SQLSem) a where
-  Insert :: TableSpec -> QueryExpr -> SQLStatement () 
-  -- Given a table and a query, insert those values into that table.
-
-  Delete :: TableSpec -> ValueExpr -> SQLStatement () 
-  -- Delete from a table those values specified by the predicate
- 
-  Update :: TableSpec -> ValueExpr -> [(Name, ValueExpr)] -> SQLStatement () 
-  -- Same as above, this time taking two functions, the first is again the where
-  -- clause, the 2nd computes the values to be updated. 
-
-  SetRef :: Name -> ValueExpr -> SQLStatement () 
-  -- Set the value of a reference to the given value. 
-
-  NewRef :: SqlTType -> Maybe Name -> Maybe ValueExpr -> SQLStatement Name 
-  -- Creates a new reference of the given type. Optionally takes a name to use
-  -- as a prototype for the new name, and an initial value. The default initial
-  -- value of the reference is null.
-
-  MakeTable :: TableSpec -> SQLStatement () 
-  DropTable :: TableSpec -> SQLStatement () 
-  -- Create/dropping tables 
-
-  IfSQL :: ValueExpr -> SQLStatement a -> SQLStatement a -> SQLStatement ()  
-  -- An If statement takes a boolean valued expression. 
- 
-  (:>>=) :: IsSQLType a => SQLStatement a -> (a -> SQLSt x b) -> SQLSt x b 
-  SQLRet :: IsSQLType a => a -> SQLSt x a 
-  -- Semantics. Only allowed for sql types. 
-
-  SQLFunCall :: SQLMethodName a -> VectorValue ValueExpr -> SQLStatement a
-  SQLDefunMethod :: SQLMethod a -> SQLStatement (SQLMethodName a)
-  -- Methods 
-
-pattern SQLNoop :: SQLStatement () 
-pattern SQLNoop = SQLRet () 
 
 -- Convert a declaration to a table specification.
 -- Based on Database.Design.Ampersand.FSpec.SQL.selectDeclaration
-decl2TableSpec :: FSpec -> Declaration -> TableSpec
-decl2TableSpec fSpec decl = 
-  let q = QName . name 
-      (plug,src,tgt) = 
-        case decl of 
-          Sgn{} -> getDeclarationTableInfo fSpec decl 
-          Isn{} -> let (p,a) = getConceptTableInfo fSpec (detyp decl) in (p,a,a)
-          Vs{}  -> error "decl2TableSpec: V[_,_] not expected here"
-  in TableSpec (q plug) $ map q [src,tgt]
+decl2TableSpec :: FSpec -> Declaration -> Exists TableSpec 
+decl2TableSpec fSpec decl = undefined 
+  -- let (plug,src,tgt) = 
+  --       case decl of 
+  --         Sgn{} -> getDeclarationTableInfo fSpec decl 
+  --         Isn{} -> let (p,a) = getConceptTableInfo fSpec (detyp decl) in (p,a,a)
+  --         Vs{}  -> error "decl2TableSpec: V[_,_] not expected here"
+  -- in case TL.someSymbolVal (name src) of { (TL.SomeSymbol (srcT :: Proxy srcT)) ->  
+  --    case TL.someSymbolVal (name tgt) of { (TL.SomeSymbol (tgtT :: Proxy tgtT)) -> 
+  --       let r = withSingT (SSQLRel $ SSQLRow $ PCons (SRecLabel (SSymbol srcT) SSQLAtom) $ PCons (SRecLabel (SSymbol tgtTy) SSQLAtom) PNil) $ 
+  --               MkTableSpec $ Ref_ $ QName $ name plug
+  --           r :: TableSpec '[ srcT ::: 'SQLAtom, tgtT ::: 'SQLAtom ]
+  --       in Ex r
+  --    }}
+
+-- Ex $ MkTableSpec $  
+
+-- TableSpec (q plug) $ map q [src,tgt]
+
+{-
 
 -- I really dont know if there is a better way in sql....
 sqlTrue, sqlFalse :: ValueExpr
@@ -270,3 +192,4 @@ eca2SQL fSpec@FSpec{originalContext,plugInfos} (ECA _ delta action _) =
                    -- No clue. Need to clarify what this actually does. Every single function in all of ampersand 
                    -- throws an error at `Let' - so what the hell does it actually do?
         -}
+-}

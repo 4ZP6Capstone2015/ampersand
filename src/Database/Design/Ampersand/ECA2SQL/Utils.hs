@@ -1,6 +1,6 @@
 {-# LANGUAGE PatternSynonyms, NoMonomorphismRestriction, OverloadedStrings, LambdaCase, EmptyCase #-} 
 {-# LANGUAGE TemplateHaskell, QuasiQuotes, ScopedTypeVariables, PolyKinds, UndecidableInstances, DataKinds, DefaultSignatures #-}
-{-# LANGUAGE PartialTypeSignatures #-} 
+{-# LANGUAGE PartialTypeSignatures, TypeOperators #-} 
 {-# OPTIONS -fno-warn-unticked-promoted-constructors #-} 
 
 -- Various utilities used by ECA2SQL 
@@ -30,6 +30,10 @@ data Prod (f :: k -> *) (xs :: [k]) where
   PNil :: Prod f '[] 
   PCons :: f x -> Prod f xs -> Prod f (x ': xs) 
 
+someProd :: [Exists f] -> Exists (Prod f)
+someProd [] = Ex PNil 
+someProd (Ex x:xs) = someProd xs #>> Ex . PCons x
+
 data Sum (f :: k -> *) (xs :: [k]) where 
   SHere :: f x -> Sum f (x ': xs) 
   SThere :: Sum f xs -> Sum f (x ': xs) 
@@ -48,6 +52,13 @@ type family NonEmpty (xs :: [k]) :: Constraint where
 -- Reify a class as a value
 data Dict p where Dict :: p => Dict p 
 
+-- Existence proof 
+data Exists p where Ex :: p x -> Exists p
+
+infixr 3 #>>
+(#>>) :: Exists p -> (forall x . p x -> r) -> r
+(#>>) (Ex x) f = f x
+
 -- Manipulating equality proofs 
 cong :: f :~: g -> a :~: b -> f a :~: g b 
 cong Refl Refl = Refl 
@@ -62,11 +73,20 @@ cong3 Refl Refl Refl Refl = Refl
 -- to `x'
 newtype Elem (x :: k) (xs :: [k]) = MkElem { getElem :: Sum ((:~:) x) xs }
 
+type family IsElem (x :: k) (xs :: [k]) :: Constraint where 
+  IsElem x (x ': xs) = () 
+  IsElem x (y ': xs) = IsElem x xs 
+
 -- Also known as flip 
 data AppliedTo (x :: k) (f :: k -> *) where Ap :: f x -> x `AppliedTo` f 
 
 data Flip (f :: k0 -> k1 -> *) (x :: k1) (y :: k0) where 
   Flp :: f y x -> Flip f x y
+
+data (:*:) (f :: k0 -> *) (g :: k1 -> *) (x :: (k0,k1)) where 
+  (:*:) :: f x -> g y -> (:*:) f g '(x , y)
+newtype K a (x :: k) = K { unK :: a } 
+newtype Id a = Id { unId :: a } 
 
 -- Type level OR 
 type family (&&) (x :: Bool) (y :: Bool) :: Bool where 
@@ -102,6 +122,11 @@ data family SingT (y :: k)
 class Sing x where 
   sing :: SingT x 
 
+class ValueSing (kp :: KProxy k) where 
+  type ValOfSing (kp :: KProxy k)
+  sing2val :: forall (x :: k) . SingT x -> ValOfSing kp 
+  val2sing :: Proxy kp -> ValOfSing kp -> Exists (SingT :: k -> *)
+
 -- Based on http://okmij.org/ftp/Haskell/tr-15-04.pdf and
 -- https://hackage.haskell.org/package/reflection-2.1.1.1/docs/src/Data-Reflection.html#reify
 
@@ -117,6 +142,11 @@ data instance SingT (y :: Symbol) where
 type SymbolSing = (SingT :: Symbol -> *)
 instance KnownSymbol x => Sing x where 
   sing = SSymbol Proxy 
+
+instance ValueSing ('KProxy :: KProxy Symbol) where 
+  type ValOfSing ('KProxy :: KProxy Symbol) = String  
+  sing2val (SSymbol x) = TL.symbolVal x 
+  val2sing _ str = case TL.someSymbolVal str of { TL.SomeSymbol x -> Ex (SSymbol x) } 
 
 -- Nat 
 data instance SingT (y :: Nat) where 
@@ -250,4 +280,3 @@ if_ap (IfA f) (IfA a) = IfA $
   case sing :: SingT cond of 
     STrue -> f a 
     SFalse -> f a 
-

@@ -42,7 +42,7 @@ proj_is_vtr (PCons (SRecLabel nm x) xs@PCons{}) =
 proj_is_vtr _ = error "proj_is_vtr:impossible"
 -}
 
--- Indexing 
+-- Indexing. Overloaded operator with typeclasses. 
 
 class IndexInto (t :: SQLType) (indexk :: KProxy index) | t -> indexk where 
   type GetAtIndex t (i :: index) :: SQLType 
@@ -56,6 +56,8 @@ instance IndexInto ('SQLRel ('SQLRow xs)) ('KProxy :: KProxy Symbol) where
 
 instance IndexInto ('SQLVec x) ('KProxy :: KProxy TL.Nat) where 
   type GetAtIndex ('SQLVec ts) (i :: TL.Nat) = Lookup ts i
+
+
 
 -- (!) :: (Lookup xs nm ~ r) => SQLVal ('SQLRow xs) -> SingT nm -> SQLVal r
 -- x ! t@(SSymbol tp) =  $ Sm.makeSelect 
