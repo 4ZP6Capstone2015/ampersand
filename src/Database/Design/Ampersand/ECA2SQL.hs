@@ -36,38 +36,84 @@ Can this be plugged in?
 -- prettySQLQuery::FSpec -> Int -> Unique -> String -- not sure if this is right?
 -- ^^ defined in SQL.hs.
 -- we want to pretty print the SQL statements.
--- won't work.
--- pretty :: Int -> Doc -> String
--- (<>) :: Doc -> Doc -> Doc -> -- concatenates two documents, no format
--- group :: Doc -> Doc --returns set with one new element; defined by flatten, do we need this?
--- nil :: Doc -- left and right unit
--- text :: String -> Doc -- converts a string to the corresponding document
--- text concatText = case concatText of 
-            -- (s ++ t) -> text s <> text table --homomorphism from string concat to doc concat, applied left to right
-   -- "" -> nil
--- line :: Doc --line break, assume string passed to text has no line break
--- nest :: Int -> Doc -> Doc -- adds indentation to the document 
--- nest nestText = case nestText of  -- homomorph from addition to composition, distri through concat
-   -- (i+j) x -> nest i (nest j x) -- applied left to right
-   -- 0 x -> x -- applied left to right 
-   -- (x <> y) -> nest i x <> nest i y -- applied right to left
-   -- i nil -> nil -- ""
-   -- i (text s) -> text s -- each law on a binary operator is paired with a corresponding law for its unit; right to left
--- layout :: Doc -> String --converts document to a string; identity function 
--- layout layoutText = case layoutText of
-   -- (x <> y) -> layout x ++ layout y -- doc to string concat, layout is invert of text
-   -- nil -> ""
-   -- (text s) -> s
-   -- (nest i line) -> '\n' : copy i '' -- layout of nested line is a newline followed by no indentation for lining up at each level
--- -- might want to take out tts and associated text
--- showTree showTreeText = case showTreeText of
-   -- (Node s ts tts) -> text s <> nest (length s) (showBracket ts) <> nest (length s) (showBracket tts) -- can s = binSQLQuery (bceq0), ts = binSQLQuery (bceq1), or is s combineOp?
-   -- (Node s ts nil) -> group (text s <> nest (length s) (showBracket ts)) -- keep total less than i character (pretty::Int -> Doc -> String)
--- showBracket stuff = 
-   -- case stuff of [] -> nil
-      -- ts -> text "INSERT INTO" <> nest 0 line showTrees ts <> text line "SELECT" <> nest 0 line showTree tts <> text line "FROM")
-      -- [t] -> showTree t
-      -- showTree (t:ts) -> showTree t <> line text "," <> showTree ts
+-- won't work.\
+data Doc = Nil 
+         | String `Text` Doc  --  text s <> x
+         | Doc :<> Doc
+         | Doc :<|> Doc
+         | Doc `Union` Doc
+         | String `Text` Doc 
+         | Int `Line` Doc  -- nest i line <>x
+         | Doc `Union` Doc --  x <|> y, two invariants, x and y must both be flattened
+pretty :: Int -> Doc -> String
+
+flatten :: Doc -> Doc
+flatten abc = case abc of
+    (x <|> y)  -> flatten x
+    (x <> y)   -> flatten x <> flatten y
+	nil        -> nil
+	(text s)   -> text s
+	line       -> text "\n"
+	(nest i x) -> flatten x
+
+(<|>) :: Doc -> Doc -> Doc
+(<|>) (x <|> y) <> z = (x <> z) <|> (y <> z)
+(<|>) x <> (y <|> z) = (x <> y) <|> (x <> z)
+(<|>) nest i (x <|> y) = nest i x <|> nest i y 
+(<>) :: Doc -> Doc -> Doc -> -- concatenates two documents, no format
+(x `Union` y) <> z = (x <> z) `Union` nest k y
+group :: Doc -> Doc --returns set with one new element; defined by flatten, do we need this?
+-- group -- reduces document to normal form
+group x = case x of 
+      x             -> flatten x <|> x
+	  (i `Line` x)  -> ("" `Text` flatten x) `Union` (i `Line` x)
+	  (s `Text` x)  -> s `Text` group x
+	  (x `Union` y) -> group x `Union` y
+nil :: Doc -- left and right unit
+text :: String -> Doc -- converts a string to the corresponding document
+text concatText = case concatText of
+	(s ++ t) -> text s <> text table --homomorphism from string concat to doc concat, applied left to right
+	"" -> nil
+line :: Doc --line break, assume string passed to text has no line break
+nest :: Int -> Doc -> Doc -- adds indentation to the document 
+nest nestText = case nestText of  -- homomorph from addition to composition, distri through concat
+    (i+j) x    -> nest i (nest j x) -- applied left to right
+    0 x        -> x -- applied left to right 
+    (x <> y)   -> nest i x <> nest i y -- applied right to left
+    i nil      -> nil -- ""
+    i (text s) -> text s -- each law on a binary operator is paired with a corresponding law for its unit; right to left
+layout :: Doc -> String --converts document to a string; identity function 
+layout layoutText = case layoutText of
+    (x <> y)    -> layout x ++ layout y -- doc to string concat, layout is invert of text
+    nil -> ""
+    (text s) -> s
+    (nest i line) -> "\n" : copy i "" -- layout of nested line is a newline followed by no indentation for lining up at each level
+	-- might want to take out tts and associated text
+
+showBracket stuff = 
+		case stuff of 
+		    [] -> nil
+			ts -> text "INSERT INTO" <> nest 0 line showTrees ts <> text line "SELECT" <> nest 0 line showTree tts <> text line "FROM")
+			[t] -> showTree t
+			[ts] bracket "[" (showTree ts) "]"
+
+data Tree = Node String [Tree]
+showTree showTreeText = case showTreeText of
+	(Node s ts) -> text s <> nest (length s) (showBracket ts)-- can s = binSQLQuery (bceq0), ts = binSQLQuery (bceq1), or is s combineOp?
+	(Node s ts) -> group (text s <> nest (length s) (showBracket ts)) -- keep total less than i character (pretty::Int -> Doc -> String)
+    (t:ts)      -> showTree t <> line text "," <> showTree ts
+	[t]         -> showTree t
+	
+-- Utility function
+bracket l x r = group (text l <> nest 2 (line <> x) <> line <> text r)
+-- tree printer
+tree = Node "Table <Table name>" [
+       Node "outter" [
+	   Node "middle" []
+	   Node "lower" []
+	   ],]
+	   
+testtree w = putStr( pretty w (showTree tree))
    
    
 -- -- INSERT INTO <tgt>
@@ -75,9 +121,9 @@ Can this be plugged in?
 -- -- FROM <src> WHERE <condition> -- where = binSQLQuery (bseWhr)? -- not sure about the correctness of this query
 
 -- -- text "INSERT INTO <tgt>" <> 
-   -- -- nest 0 (
-      -- -- line <> text "SELECT <src.col>"
-      -- -- line <> text "FROM <src> " <> text "WHERE <condition>")
+-- -- nest 0 (
+-- -- line <> text "SELECT <src.col>"
+-- -- line <> text "FROM <src> " <> text "WHERE <condition>")
 
 
 
