@@ -107,13 +107,30 @@ STrue |&& STrue = STrue
 class DecideEq (f :: k -> *) where 
   (%==) :: forall x y . f x -> f y -> Maybe (x :~: y) 
 
--- type family (==) (a :: k) (b :: k) :: Bool where 
---   a == a = 'True 
---   a == b = 'False 
+-- truly decidable equality. Unfortunatley, it is rarely practical.. 
+data DecEq (x :: k) (y :: k) where 
+  DecYes :: DecEq a a 
+  DecNo  :: (forall r . a :~: b -> r) -> DecEq a b 
 
--- data DecEq (x :: k) (y :: k) where 
---   DecYes :: DecEq a a 
---   DecNo  :: (forall r . a :~: b -> r) -> DecEq a b 
+mapDec :: ((x ~ y) => x' :~: y') -> (forall q. (x' ~ y') => (forall r . x :~: y -> r) -> q) -> DecEq x y -> DecEq x' y' 
+mapDec yes _ DecYes = case yes of { Refl -> DecYes } 
+mapDec _ no (DecNo p) = DecNo (\case { Refl -> no p })
+
+natEq :: NatSing a -> NatSing b -> DecEq a b 
+natEq SZ SZ = DecYes 
+natEq SZ{} SS{} = DecNo $ \case 
+natEq SS{} SZ{} = DecNo $ \case 
+natEq (SS n) (SS m) = mapDec Refl (\p -> p Refl) $ natEq n m 
+
+eqList :: (forall (x :: k) (y :: k) . SingT x -> SingT y -> DecEq x y) 
+       -> SingT (xs :: [k]) -> SingT (ys :: [k]) -> DecEq xs ys 
+eqList _ SNil SNil = DecYes 
+eqList f (SCons x xs) (SCons y ys) = 
+  case f x y of 
+    DecYes -> mapDec Refl (\p -> p Refl) $ eqList f xs ys 
+    DecNo p -> DecNo $ \case { Refl -> p Refl } 
+eqList _ SCons{} SNil{} = DecNo $ \case 
+eqList _ SNil{} SCons{} = DecNo $ \case 
 
 instance (DecideEq f) => DecideEq (Prod f) where 
   PNil %== PNil = Just Refl 

@@ -68,7 +68,10 @@ data PrimSQLFunction (args :: [SQLType]) (out :: SQLType) where
   Not :: PrimSQLFunction '[ 'SQLBool ] 'SQLBool
   Or, And :: PrimSQLFunction '[ 'SQLBool, 'SQLBool ] 'SQLBool
   In, NotIn :: PrimSQLFunction '[ a, 'SQLRel a ] 'SQLBool
-  Exists :: PrimSQLFunction '[ 'SQLRel a ] 'SQLBool 
+  Exists :: PrimSQLFunction '[ 'SQLRel a ] 'SQLBool
+  GroupBy :: PrimSQLFunction '[ 'SQLRel a, a ] ('SQLRel ('SQLRel a))
+  SortBy  :: PrimSQLFunction '[ 'SQLRel a, a ] ('SQLRel a)
+  Max, Min, Sum, Avg :: {- IsSQLNumeric a => -} PrimSQLFunction '[ 'SQLRel a ] a 
 
 primSQL :: PrimSQLFunction args out -> Prod SQLVal args -> SQLVal out 
 primSQL PTrue = \PNil -> SQLScalarVal $ Sm.In True (Sm.NumLit "0") $ Sm.InList [Sm.NumLit "0"]
