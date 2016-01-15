@@ -27,8 +27,16 @@ import qualified Database.Design.Ampersand.ECA2SQL.TSQLCombinators as T
 import qualified GHC.TypeLits as TL 
 
 -- TODO: Pretty printer for SQL statements
+{- I believe these are all function declaration from 
+the "A prettier printer"
+- Philip Wadler
+Can this be plugged in? 
+-}
 
 -- prettySQLQuery::FSpec -> Int -> Unique -> String -- not sure if this is right?
+-- ^^ defined in SQL.hs.
+-- we want to pretty print the SQL statements.
+-- won't work.
 -- pretty :: Int -> Doc -> String
 -- (<>) :: Doc -> Doc -> Doc -> -- concatenates two documents, no format
 -- group :: Doc -> Doc --returns set with one new element; defined by flatten, do we need this?
@@ -63,8 +71,8 @@ import qualified GHC.TypeLits as TL
    
    
 -- -- INSERT INTO <tgt>
--- -- SELECT <src.col> --can this be binSQLQuery(bseSrc)? from SQL.hs
--- -- FROM <src> WHERE <condition> -- where = binSQLQuery (bseWhr)?
+-- -- SELECT <src.col> --can this be binSQLQuery(bseSrc)? from SQL.hs ? - possibly, I'm still trying to figure that out
+-- -- FROM <src> WHERE <condition> -- where = binSQLQuery (bseWhr)? -- not sure about the correctness of this query
 
 -- -- text "INSERT INTO <tgt>" <> 
    -- -- nest 0 (
