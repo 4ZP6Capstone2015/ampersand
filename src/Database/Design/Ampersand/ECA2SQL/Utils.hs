@@ -153,6 +153,23 @@ instance ValueSing ('KProxy :: KProxy Symbol) where
 
 symbolKindProxy = Proxy :: Proxy ('KProxy :: KProxy Symbol)
 
+data CompareSymbol a b (x :: Ordering) where 
+  SymbolLT :: TL.CmpSymbol a b :~: 'LT -> CompareSymbol a b 'LT 
+  SymbolEQ :: TL.CmpSymbol a b :~: 'EQ -> CompareSymbol a b 'EQ 
+  SymbolGT :: TL.CmpSymbol a b :~: 'GT -> CompareSymbol a b 'GT 
+
+compareSymbol' :: SingT x -> SingT y -> Exists (CompareSymbol x y)
+compareSymbol' (SSymbol x) (SSymbol y) = compareSymbol x y  
+
+compareSymbol :: forall x y . (TL.KnownSymbol x, TL.KnownSymbol y) => Proxy x -> Proxy y -> Exists (CompareSymbol x y) 
+compareSymbol x y =  
+  let trustMe :: forall a b . a :~: b 
+      trustMe = unsafeCoerce (Refl :: () :~: ())
+  in case compare (TL.symbolVal x) (TL.symbolVal y) of 
+       LT -> Ex (SymbolLT (trustMe :: TL.CmpSymbol x y :~: 'LT)) 
+       EQ -> Ex (SymbolEQ (trustMe :: TL.CmpSymbol x y :~: 'EQ)) 
+       GT -> Ex (SymbolGT (trustMe :: TL.CmpSymbol x y :~: 'GT)) 
+
 -- Nat 
 data instance SingT (y :: Nat) where 
   SZ :: SingT 'Z 
@@ -214,23 +231,27 @@ type family RecLabels (xs :: [RecLabel a b]) :: [a] where
   RecLabels '[] = '[] 
   RecLabels ((nm ::: ty) ': xs) = nm ': RecLabels xs
 
+type family CaseOrdering (x :: Ordering) (a :: k) (b :: k) (c :: k) :: k where 
+  CaseOrdering 'LT a b c = a 
+  CaseOrdering 'EQ a b c = b 
+  CaseOrdering 'GT a b c = c 
+
 -- Lookup a value in a list of rec labels 
-type family Lookup (xs :: [k0]) (x :: k1) :: k2 where 
-  Lookup ( (nm ::: ty) ': rest ) nm = ty 
-  Lookup ( (nm ::: ty) ': rest ) nm' = Lookup rest nm' 
+type family LookupRec (xs :: [RecLabel Symbol k]) (x :: Symbol) :: k where 
+  LookupRec ( (nm ::: ty) ': rest ) nm' = CaseOrdering (TL.CmpSymbol nm nm') (LookupRec rest nm') ty (LookupRec rest nm') 
 
-  Lookup ( x ': xs ) 0 = x 
-  Lookup ( x ': xs ) n = Lookup xs (n TL.- 1)
+type family LookupIx (xs :: [k]) (i :: TL.Nat) :: k where 
+  LookupIx ( x ': xs ) 0 = x 
+  LookupIx ( x ': xs ) n = LookupIx xs (n TL.- 1)
 
-lookupRec :: forall (xs :: [RecLabel a b]) (nm :: a) (r :: b) . (DecideEq (SingT :: a -> *), Lookup xs nm ~ r) => Prod SingT xs -> SingT nm -> SingT r 
+lookupRec :: forall (xs :: [RecLabel Symbol b]) (nm :: Symbol) (r :: b) . (LookupRec xs nm ~ r) => Prod SingT xs -> SingT nm -> SingT r 
 lookupRec PNil _ = error "lookupSing: impossible" 
 lookupRec (PCons (SRecLabel nm ty) rest) nm' = 
-  case nm %== nm' of 
-    Just Refl -> ty 
-    -- No clue how to write this properly.. the compiler can't tell that 
-    --   nm /= nm'   =>   Lookup ( (nm ::: ty) : rest ) nm' == Lookup rest nm 
-    -- because it doesn't know about the type inequality at all... 
-    Nothing -> unsafeCoerce $ lookupRec rest nm' 
+  case compareSymbol' nm nm' of 
+    Ex q | SymbolEQ Refl <- q -> ty 
+         | SymbolLT Refl <- q -> lookupRec rest nm' 
+         | SymbolGT Refl <- q -> lookupRec rest nm' 
+    _ -> error "lookupRec:impossible" 
 
         
 -- List
@@ -264,8 +285,8 @@ if_ap (IfA f) (IfA a) = IfA $
 class Uncurry f args o r | f args o -> r where 
   uncurryN :: (Prod f args -> f o) -> r
 
-instance Uncurry f '[] o (f o) where 
+instance (f o ~ r) => Uncurry f '[] o r where 
   uncurryN f = f PNil 
 
-instance Uncurry f args o r => Uncurry f (arg ': args) o (f arg -> r) where 
+instance (Uncurry f args o r, q ~ (f arg -> r)) => Uncurry f (arg ': args) o q where 
   uncurryN f arg = uncurryN (f . PCons arg) 

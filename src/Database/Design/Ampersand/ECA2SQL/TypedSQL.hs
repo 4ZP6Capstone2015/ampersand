@@ -72,27 +72,11 @@ type family IsScalarType (x :: k) :: Bool where
   IsScalarType 'SQLBool = 'True
   IsScalarType 'SQLAtom = 'True
   
-  -- IsScalarType ('SQLRow x) = IsScalarType x 
-  -- IsScalarType ('SQLVec x) = IsScalarType x 
-  -- IsScalarType ((nm :: Symbol) ::: (x :: SQLType)) = IsScalarType x 
-  -- IsScalarType '[] = 'True 
-  -- IsScalarType (x ': xs) = IsScalarType x && IsScalarType xs 
-
 isScalarType :: SingT (x :: SQLType) -> SingT (IsScalarType x)
 isScalarType SSQLAtom = STrue 
 isScalarType SSQLBool = STrue 
-isScalarType (SSQLVec _vs0) = SFalse {-
-  case vs0 of 
-    PNil -> STrue
-    PCons v vs ->  isScalarType v |&& isScalarType (SSQLVec vs) -} 
-isScalarType ((SSQLRow _ts0)) = SFalse {-
-  case ts0 of 
-    PCons (SRecLabel _ t) PNil       -> 
-      case isScalarType t of 
-        STrue -> STrue 
-        SFalse -> SFalse 
-    PCons (SRecLabel _ t) ts@PCons{} -> isScalarType t |&& isScalarType (SSQLRow  ts)
-    _ -> error "impossible" -}
+isScalarType (SSQLVec _vs0) = SFalse 
+isScalarType ((SSQLRow _ts0)) = SFalse 
 isScalarType (SSQLRel _) = SFalse   
 
 -- Singletons for SQLType 
@@ -118,6 +102,11 @@ data SQLValSem (x :: SQLRefType) where
   Method_ :: (Sing args, Sing out) => Name -> SQLValSem ('SQLMethod args out) 
   Ref_ :: Sing x => Name -> SQLValSem ('SQLRef x) 
   Val :: SQLVal x -> SQLValSem ('Ty x) 
+
+-- Pattern match only (no constructor syntax). These permit access (but not the
+-- ability to construct) to the underlying untyped representation. 
+pattern Method nm <- Method_ nm 
+pattern Ref x <- Ref_ x 
 
 -- Get the sql type of a semantic value which represens a value or reference
 -- to an actual type. 
@@ -145,12 +134,6 @@ unsafeSQLValFromQuery = SQLQueryVal
 deref :: forall x . SQLValRef x -> SQLVal x 
 deref (Ref_ nm) = unsafeSqlValFromName nm 
 
--- Pattern match only (no constructor syntax). These permit access (but not the
--- ability to construct) to the underlying untyped representation. 
--- pattern Method nm <- Method_ nm 
--- pattern Ref x <- Ref_ x 
--- pattern Val x <- Val_ x 
-
 instance DecideEq (SingT :: SQLType -> *) where 
   SSQLAtom %==  (SSQLAtom ) = Just Refl 
   SSQLBool %==  (SSQLBool ) = Just Refl 
@@ -175,7 +158,8 @@ tableSpec :: NonEmpty x => Name -> Prod SingT x -> TableSpec x
 tableSpec tn ty@PCons{} = MkTableSpec $ withSingT (SSQLRow ty) $ Ref_ tn 
 tableSpec _ PNil = error "tableSpec: impossible"
 
--- When the types and the shape, but not the names are known at runtime. 
+-- When the types and the shape, but not the names are known at runtime. The type of this is hideous
+-- and it should be deleted. 
 someTableSpecShape :: NonEmpty (ts :: [SQLType]) => Name -> Prod (K String :*: SQLTypeS) ts 
               -> (forall (ks :: [RecLabel Symbol SQLType]) . Dict (NonEmpty ks) -> RecAssocs ks :~: ts -> TableSpec ks -> r) 
               -> r  -- Written with cps because expressing this with Exists is too hard..
@@ -197,6 +181,7 @@ someTableSpec tn cols =
   someProd (map (\(nm,Ex t) -> val2sing symbolKindProxy nm #>> \nms -> Ex (nms `SRecLabel` t)) cols) 
      #>> \case { PNil -> error "someTableSpec: empty list"; q@PCons{} -> Ex . tableSpec tn $ q }
 
+-- A SQL method 
 data SQLMethod ts out where 
   MkSQLMethod :: (Prod (SQLValSem :.: 'SQLRef) ts -> SQLSt 'Mthd ('Ty out)) -> SQLMethod ts out 
   -- A method with a set of input parameters. The function takes a vector of
@@ -205,9 +190,10 @@ data SQLMethod ts out where
   SQLMethodWithFormalParams :: Prod (SQLValSem :.: 'SQLRef) ts -> SQLSt 'Mthd ('Ty out) -> SQLMethod ts out 
   -- A method with formal parameters - using this is considered unsafe. 
 
--- Used to distinguish sql methods from statements. The only difference 
--- is that a method cannot be "sequenced" with `:>>='. Essentially this
--- allows us to define 
+-- Used to distinguish sql methods from statements. The only difference is that
+-- a method cannot be "sequenced" with `:>>='. Essentially this allows us to
+-- define the SQLRet constructor (see below) in a way such that the type system
+-- enforces that that branch always returns. 
 data SQLSem = Stmt | Mthd 
 
 type SQLStatement = SQLSt 'Stmt

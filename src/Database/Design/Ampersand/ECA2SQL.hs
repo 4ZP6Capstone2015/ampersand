@@ -98,6 +98,7 @@ decl2TableSpec fSpec decl =
 -- TODO: Properly deal with the delta.. this will almost certainly not work.
 -- TODO: Add an option to the ampersand executable which will print all of the 
 --       eca rules and their corresponding SQL methods to stderr. 
+-- TODO: Add the motives in comments to the generated code 
 
 eca2SQL :: FSpec -> ECArule -> SQLMethod '[] 'SQLBool
 eca2SQL fSpec@FSpec{originalContext,plugInfos} (ECA _ delta action _) =  

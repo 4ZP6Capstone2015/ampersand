@@ -31,7 +31,7 @@ class IndexInto (t :: SQLType) (indexk :: KProxy index) | t -> indexk where
   (!) :: forall (i :: index) . SQLVal t -> SingT i -> SQLVal (GetAtIndex t i)  
 
 instance IndexInto ('SQLRow xs) ('KProxy :: KProxy Symbol) where 
-  type GetAtIndex ('SQLRow xs) (nm :: Symbol) = Lookup xs nm 
+  type GetAtIndex ('SQLRow xs) (nm :: Symbol) = LookupRec xs nm 
 
   (!) v@(SQLQueryVal x) i@(SSymbol pri) = 
     let strNm = Sm.Name $ TL.symbolVal pri in 
@@ -56,10 +56,10 @@ instance IndexInto ('SQLRow xs) ('KProxy :: KProxy Symbol) where
   (!) _ _ = error "IndexInto{SQLRow}(!):impossible"
 
 instance IndexInto ('SQLRel ('SQLRow xs)) ('KProxy :: KProxy Symbol) where 
-  type GetAtIndex ('SQLRel ('SQLRow xs)) (nm :: Symbol) = 'SQLRel (Lookup xs nm)
+  type GetAtIndex ('SQLRel ('SQLRow xs)) (nm :: Symbol) = 'SQLRel (LookupRec xs nm)
 
 instance IndexInto ('SQLVec x) ('KProxy :: KProxy TL.Nat) where 
-  type GetAtIndex ('SQLVec ts) (i :: TL.Nat) = Lookup ts i
+  type GetAtIndex ('SQLVec ts) (i :: TL.Nat) = LookupIx ts i
 
 -- Primitive functions go here. This allows an implementation of SQL to be 
 -- as simple as a function of type the same as `primSQL'. 
@@ -78,6 +78,27 @@ primSQL In = \(SQLScalarVal x :> SQLQueryVal y :> PNil) -> SQLScalarVal $ Sm.In 
 primSQL NotIn = \(SQLScalarVal x :> SQLQueryVal y :> PNil) -> SQLScalarVal $ Sm.In False x (Sm.InQueryExpr y) 
 primSQL Or = \(SQLScalarVal x :> SQLScalarVal y :> PNil) -> SQLScalarVal $ Sm.BinOp x ["OR"] y
 primSQL And = \(SQLScalarVal x :> SQLScalarVal y :> PNil) -> SQLScalarVal $ Sm.BinOp x ["AND"] y
+primSQL Exists = \(SQLQueryVal x :> PNil) -> SQLScalarVal $ Sm.SubQueryExpr Sm.SqExists x 
 
 sql :: (Uncurry SQLVal args out fun) => PrimSQLFunction args out -> fun 
 sql fun = uncurryN $ primSQL fun 
+
+
+{-
+-- The type of select is much too complex...
+
+data Aliased t where 
+  NoAlias :: SQLVal t -> Aliased (nm ::: t) 
+  Alias   :: SQLVal t -> SingT nm -> Aliased (nm ::: t) 
+
+newtype Table t = MkTable { tableRows :: SQLVal ('SQLRel ('SQLRow t)) }
+
+data SortSpec t = SortSpec (SQLVal t) Direction NullsOrder
+
+select :: Sm.SetQuantifier                                        -- Quantifier     [DISTINCT,ALL] 
+       -> Prod Aliased out_ts                                     -- Select list    ( <expr> [as col], ... )
+       -> Prod Table src_ts                                       -- Source tables  ( can be almost anything )
+       -> Maybe (SQLVal 'SQLBool)                                 -- WHERE clause   ( [ WHERE <expr> ] )
+       -> Maybe (SQLVal 'SQLBool)                                 -- HAVING clause  ( [ HAVING <expr> ] )
+       -> 
+-}
