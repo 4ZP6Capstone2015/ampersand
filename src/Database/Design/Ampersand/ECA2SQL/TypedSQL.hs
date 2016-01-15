@@ -60,9 +60,9 @@ type SQLTypeS = (SingT :: SQLType -> *)
 data instance SingT (x :: SQLType) where 
   SSQLAtom :: SingT 'SQLAtom 
   SSQLBool :: SingT 'SQLBool
-  SSQLRow :: NonEmpty ts => Prod SingT ts -> SingT ('SQLRow ts)
-  SSQLVec :: Prod SingT ts -> SingT ('SQLVec ts) 
-  SSQLRel :: SingT x -> SingT ('SQLRel x) 
+  SSQLRow :: NonEmpty ts => !(SingT ts) -> SingT ('SQLRow ts)
+  SSQLVec :: !(SingT ts) -> SingT ('SQLVec ts) 
+  SSQLRel :: !(SingT x) -> SingT ('SQLRel x) 
 
 -- Determine if a SQL type is a really a scalar type. 
 type family IsScalarType (x :: k) :: Bool where 
@@ -80,8 +80,8 @@ isScalarType ((SSQLRow _ts0)) = SFalse
 isScalarType (SSQLRel _) = SFalse   
 
 -- Singletons for SQLType 
-instance (Sing xs, NonEmpty xs) => Sing ('SQLRow xs) where sing = SSQLRow (getSList sing)
-instance (Sing xs) => Sing ('SQLVec xs) where sing = SSQLVec (getSList sing)
+instance (Sing xs, NonEmpty xs) => Sing ('SQLRow xs) where sing = SSQLRow sing 
+instance (Sing xs) => Sing ('SQLVec xs) where sing = SSQLVec sing
 instance (Sing x) => Sing ('SQLRel x) where sing = SSQLRel sing 
 instance Sing 'SQLAtom where sing = SSQLAtom 
 instance Sing 'SQLBool where sing = SSQLBool 
@@ -155,7 +155,7 @@ data TableSpec t where
 
 -- Safely create a table spec. 
 tableSpec :: NonEmpty x => Name -> Prod SingT x -> TableSpec x 
-tableSpec tn ty@PCons{} = MkTableSpec $ withSingT (SSQLRow ty) $ Ref_ tn 
+tableSpec tn ty@PCons{} = MkTableSpec $ withSingT (SSQLRow $ prod2sing ty) $ Ref_ tn 
 tableSpec _ PNil = error "tableSpec: impossible"
 
 -- When the types and the shape, but not the names are known at runtime. The type of this is hideous

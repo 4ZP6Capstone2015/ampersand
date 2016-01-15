@@ -36,7 +36,7 @@ instance IndexInto ('SQLRow xs) ('KProxy :: KProxy Symbol) where
   (!) v@(SQLQueryVal x) i@(SSymbol pri) = 
     let strNm = Sm.Name $ TL.symbolVal pri in 
     case typeOf v of { SSQLRow t -> 
-    case lookupRec t i of { r -> 
+    case lookupRec (sing2prod t) i of { r -> 
     withSingT r $ 
       case isScalarType r of 
         STrue -> SQLScalarVal $ 

@@ -106,6 +106,10 @@ STrue |&& STrue = STrue
 class DecideEq (f :: k -> *) where 
   (%==) :: forall x y . f x -> f y -> Maybe (x :~: y) 
 
+type family (==) (a :: k) (b :: k) :: Bool where 
+  a == a = 'True 
+  a == b = 'False 
+
 instance (DecideEq f) => DecideEq (Prod f) where 
   PNil %== PNil = Just Refl 
   PCons x xs %== PCons y ys = liftA2 (cong2 Refl) (x %== y) (xs %== ys) 
@@ -141,7 +145,7 @@ withSingT a k = unsafeCoerce (Magic k :: Magic x r) a
 
 -- Symbol
 data instance SingT (y :: Symbol) where 
-  SSymbol :: KnownSymbol x => Proxy x -> SingT x 
+  SSymbol :: KnownSymbol x => !(Proxy x) -> SingT x 
 type SymbolSing = (SingT :: Symbol -> *)
 instance KnownSymbol x => Sing x where 
   sing = SSymbol Proxy 
@@ -154,9 +158,9 @@ instance ValueSing ('KProxy :: KProxy Symbol) where
 symbolKindProxy = Proxy :: Proxy ('KProxy :: KProxy Symbol)
 
 data CompareSymbol a b (x :: Ordering) where 
-  SymbolLT :: TL.CmpSymbol a b :~: 'LT -> CompareSymbol a b 'LT 
-  SymbolEQ :: TL.CmpSymbol a b :~: 'EQ -> CompareSymbol a b 'EQ 
-  SymbolGT :: TL.CmpSymbol a b :~: 'GT -> CompareSymbol a b 'GT 
+  SymbolLT :: !(TL.CmpSymbol a b :~: 'LT) -> CompareSymbol a b 'LT 
+  SymbolEQ :: !(TL.CmpSymbol a b :~: 'EQ) -> CompareSymbol a b 'EQ 
+  SymbolGT :: !(TL.CmpSymbol a b :~: 'GT) -> CompareSymbol a b 'GT 
 
 compareSymbol' :: SingT x -> SingT y -> Exists (CompareSymbol x y)
 compareSymbol' (SSymbol x) (SSymbol y) = compareSymbol x y  
@@ -173,18 +177,22 @@ compareSymbol x y =
 -- Nat 
 data instance SingT (y :: Nat) where 
   SZ :: SingT 'Z 
-  SS :: SingT n -> SingT ('S n) 
+  SS :: !(SingT n) -> SingT ('S n) 
 type NatSing = (SingT :: Nat -> *)
 instance Sing 'Z where sing = SZ 
 instance Sing n => Sing ('S n) where sing = SS sing 
 
 data Nat = Z | S Nat 
 
+eqNat :: SingT (n :: Nat) -> SingT m -> SingT (n == m) 
+eqNat SZ SZ = STrue 
+-- eqNat SZ SZ 
+
 -- Inductive type literals 
 
 data IsoNat n m where 
   IsoZ :: IsoNat 0 'Z 
-  IsoS :: SingT n -> IsoNat (n TL.+ 1) ('S n') 
+  IsoS :: !(SingT n) -> IsoNat (n TL.+ 1) ('S n') 
 
 type family FromTL (n :: TL.Nat) :: Nat where 
   FromTL 0 = 'Z 
@@ -195,7 +203,7 @@ type family ToTL (n :: Nat) :: TL.Nat where
   ToTL (S n) = ToTL n TL.+ 1 
 
 data instance SingT (y :: TL.Nat) where 
-  NatSingI :: (TL.KnownNat n) => Proxy n -> SingT n 
+  NatSingI :: (TL.KnownNat n) => !(Proxy n) -> SingT n 
 
 -- BOOl
 data instance SingT (x :: Bool) where 
@@ -209,7 +217,7 @@ instance Sing 'False where sing = SFalse
 -- Maybe 
 data instance SingT (x :: Maybe k) where 
   SNothing :: SingT 'Nothing 
-  SJust :: SingT x -> SingT ('Just x)
+  SJust :: !(SingT x) -> SingT ('Just x)
 type MaybeSing = (SingT :: Maybe k -> *) 
 instance Sing 'Nothing where sing = SNothing 
 instance Sing x => Sing ('Just x) where sing = SJust sing  
@@ -219,7 +227,7 @@ instance Sing x => Sing ('Just x) where sing = SJust sing
 data RecLabel a b = a ::: b
 
 data instance SingT (x :: RecLabel a b) where 
-  SRecLabel :: SingT a -> SingT b -> SingT (a ::: b)
+  SRecLabel :: !(SingT a) -> !(SingT b) -> SingT (a ::: b)
 
 instance (Sing a, Sing b) => Sing (a ::: b) where sing = SRecLabel sing sing  
 
@@ -245,7 +253,7 @@ type family LookupIx (xs :: [k]) (i :: TL.Nat) :: k where
   LookupIx ( x ': xs ) n = LookupIx xs (n TL.- 1)
 
 lookupRec :: forall (xs :: [RecLabel Symbol b]) (nm :: Symbol) (r :: b) . (LookupRec xs nm ~ r) => Prod SingT xs -> SingT nm -> SingT r 
-lookupRec PNil _ = error "lookupSing: impossible" 
+lookupRec PNil x = x `seq` error "lookupSing: impossible" 
 lookupRec (PCons (SRecLabel nm ty) rest) nm' = 
   case compareSymbol' nm nm' of 
     Ex q | SymbolEQ Refl <- q -> ty 
@@ -255,9 +263,22 @@ lookupRec (PCons (SRecLabel nm ty) rest) nm' =
 
         
 -- List
-newtype instance SingT (x :: [k]) = MkSList { getSList :: Prod SingT x } 
+prod2sing :: Prod SingT xs -> SingT xs 
+prod2sing PNil = SNil 
+prod2sing (PCons x xs) = SCons x (prod2sing xs)
+
+sing2prod :: SingT xs -> Prod SingT xs 
+sing2prod SNil = PNil 
+sing2prod (SCons x xs) = x :> sing2prod xs 
+
+data instance SingT (x :: [k]) where 
+  SNil :: SingT '[] 
+  SCons :: !(SingT x) -> !(SingT xs) -> SingT (x ': xs) 
 type ListSing = (SingT :: [k] -> *) 
-instance All Sing xs => Sing xs where sing = MkSList $ mkProdC (Proxy :: Proxy Sing) sing 
+instance All Sing xs => Sing xs where sing = prod2sing $ mkProdC (Proxy :: Proxy Sing) sing 
+
+instance DecideEq (SingT :: [k] -> *) where 
+  SNil %== SNil = Just Refl 
 
 -- Type level if. Note that this is STRICT 
 type family If (a :: Bool) (x :: k)(y :: k) :: k where 
