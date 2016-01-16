@@ -55,16 +55,6 @@ instance (All c xs, c x) => All c (x ': xs) where mkProdC pr k = PCons k (mkProd
 type family NonEmpty (xs :: [k]) :: Constraint where 
   NonEmpty (x ': xs) = () 
 
--- Reify a class as a value
-data Dict p where Dict :: p => Dict p 
-
--- Existence proof 
-data Exists p where Ex :: p x -> Exists p
-
-infixr 3 #>>
-(#>>) :: Exists p -> (forall x . p x -> r) -> r
-(#>>) (Ex x) f = f x
-
 -- `x' is an element of `xs' if there exists a `y' in `xs' such that it is equal
 -- to `x'
 newtype Elem (x :: k) (xs :: [k]) = MkElem { getElem :: Sum ((:~:) x) xs }

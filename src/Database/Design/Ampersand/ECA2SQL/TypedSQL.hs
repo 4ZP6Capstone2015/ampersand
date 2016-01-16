@@ -116,7 +116,7 @@ typeOf SQLQueryVal{} = sing
 
 -- Get the argument of a relation
 argOfRel :: forall x . SingT ('SQLRel x) -> SingT x
-argOfRel (SingTEx (WSQLRel x) (STyCtr _ (STyCons y STyNil))) = SingTEx x y  
+argOfRel (SingT (WSQLRel x)) = SingT x 
 argOfRel x = x `seq` error "argOfRel: impossible"                             
 
 -- Semantics in the interpreter. Underscores mark unsafe ctrs. 
@@ -140,27 +140,9 @@ typeOfSem x = x `seq` error "typeOfSem: impossible"
 
 -- Get the columns of a sql row.   
 colsOf :: SingT ('SQLRow xs) -> Prod SingT xs
-colsOf (SingTEx (WSQLRow WNil) (STyCtr _ (STyCons m STyNil))) = PNil 
-colsOf (SingTEx (WSQLRow (WCons x xs)) (STyCtr nm (STyCons (STyCtr _ (STyCons q (STyCons q' _))) STyNil))) =   {- (STyCtr _ (STyCons m STyNil))) -}
-  PCons (SingTEx x q) (colsOf $ SingTEx (WSQLRow xs) (STyCtr Proxy (STyCons q' STyNil)))
+colsOf (SingT (WSQLRow WNil)) = PNil 
+colsOf (SingT (WSQLRow (WCons x xs))) = PCons (SingT x) (colsOf $ SingT $ WSQLRow xs)  
 colsOf x = x `seq` error "colsOf:impossible"
-
--- (colsOf (SingTEx (WSQLRow xs) (STyCtr nm (STyCons q STyNil)))) 
-
-
-  -- go :: SingKindWitness 'KProxy (x :: [SQLType]) xr -> TyRepSing (xr :: [TyRep]) -> Prod SingT x
-  -- go = undefined
-  -- go WNil _ = PNil 
-  -- go (WCons x xs) (STyCons q qs) = _ -- PCons undefined undefined
-
-
-  -- case (x,m) of 
-  --   (WNil, _) -> PNil 
-  --   (WCons x xs, STyCons x' xs') -> _ 
-  -- case (x,m) of 
-
-    -- (WNil, STyNil) -> PNil 
-    -- (WCons x xs, STyCons y ys) -> _ 
 
 -- A SQLValRef is a reference to a sql value in the domain of the semantic interpretation. 
 type SQLValRef x = SQLValSem ('SQLRef x)
@@ -199,7 +181,9 @@ tableSpec _ PNil = error "tableSpec: impossible"
 someTableSpecShape :: NonEmpty (ts :: [SQLType]) => Name -> Prod (K String :*: SQLTypeS) ts 
               -> (forall (ks :: [RecLabel Symbol SQLType]) . Dict (NonEmpty ks) -> RecAssocs ks :~: ts -> TableSpec ks -> r) 
               -> r  -- Written with cps because expressing this with Exists is too hard..
-someTableSpecShape tn ts0 k0 = undefined -- go ts0 (\q@Dict q' ps -> k0 q q' (tableSpec tn ps)) where 
+someTableSpecShape tn ts0 k0 = error "someTableSpecShape: TODO"
+
+ -- go ts0 (\q@Dict q' ps -> k0 q q' (tableSpec tn ps)) where 
     -- go :: NonEmpty (ts :: [SQLType]) => Prod (K String :*: SQLTypeS) ts 
     --    -> (forall (ks :: [RecLabel Symbol SQLType]) . Dict (NonEmpty ks) -> RecAssocs ks :~: ts -> Prod SingT ks -> r) 
     --    -> r  
@@ -213,7 +197,7 @@ someTableSpecShape tn ts0 k0 = undefined -- go ts0 (\q@Dict q' ps -> k0 q q' (ta
     --       }}
 
 someTableSpec :: Name -> [(String, Exists SQLTypeS)] -> Exists TableSpec 
-someTableSpec tn cols = undefined   
+someTableSpec tn cols = error "someTableSpec: TODO"   
   -- someProd (map (\(nm,Ex t) -> val2sing symbolKindProxy nm #>> \nms -> Ex (nms `SRecLabel` t)) cols) 
   --    #>> \case { PNil -> error "someTableSpec: empty list"; q@PCons{} -> Ex . tableSpec tn $ q }
 
