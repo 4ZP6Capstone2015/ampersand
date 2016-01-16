@@ -25,6 +25,7 @@ import Database.Design.Ampersand.ECA2SQL.Utils
 import Database.Design.Ampersand.ECA2SQL.TypedSQL 
 import qualified Database.Design.Ampersand.ECA2SQL.TSQLCombinators as T 
 import qualified GHC.TypeLits as TL 
+import Database.Design.Ampersand.ECA2SQL.Singletons
 
 -- TODO: Pretty printer for SQL statements
 {- I believe these are all function declaration from 
@@ -90,7 +91,7 @@ decl2TableSpec fSpec decl =
           Sgn{} -> getDeclarationTableInfo fSpec decl 
           Isn{} -> let (p,a) = getConceptTableInfo fSpec (detyp decl) in (p,a,a)
           Vs{}  -> error "decl2TableSpec: V[_,_] not expected here"
-  in someTableSpecShape (QName $ name plug) (PCons (K (name src) :*: SSQLAtom) $ PCons (K (name tgt) :*: SSQLAtom) PNil) $
+  in someTableSpecShape (QName $ name plug) (PCons (K (name src) :*: SingT WSQLAtom) $ PCons (K (name tgt) :*: SingT WSQLAtom) PNil) $
       \case { Dict -> \case { Refl -> \tbl -> TableAlias tbl }}
 
 -- TODO: This function could do with some comments 
@@ -103,7 +104,7 @@ decl2TableSpec fSpec decl =
 eca2SQL :: FSpec -> ECArule -> SQLMethod '[] 'SQLBool
 eca2SQL fSpec@FSpec{originalContext,plugInfos} (ECA _ delta action _) =  
   MkSQLMethod $ \PNil -> 
-    NewRef SSQLBool (Just "checkDone") (Just T.false) :>>= \checkDone -> 
+    NewRef sing (Just "checkDone") (Just T.false) :>>= \checkDone -> 
     paClause2SQL action checkDone :>>= \_ -> 
     SQLRet (deref checkDone)
   
@@ -143,7 +144,7 @@ eca2SQL fSpec@FSpec{originalContext,plugInfos} (ECA _ delta action _) =
 
 
         paClause2SQL (CHC ps _motive) = \k ->                               -- PAClause case of CHC; ps is the precisely one clause to be executed
-          NewRef SSQLBool (Just "checkDone") (Just T.false) :>>= \checkDone -> 
+          NewRef sing (Just "checkDone") (Just T.false) :>>= \checkDone -> 
           let fin = SetRef k (T.sql T.Or (deref checkDone) (deref k)) in
           foldl (\doPs p -> paClause2SQL  p checkDone :>>= \_ -> 
                             IfSQL (deref checkDone) SQLNoop doPs 
@@ -163,7 +164,7 @@ eca2SQL fSpec@FSpec{originalContext,plugInfos} (ECA _ delta action _) =
           in \k -> Delete tbl cond :>>= const (done k) 
            
         paClause2SQL (ALL ps _motive) = \k ->                               -- PAClause case of ALL; all PAClauses are executed
-          NewRef SSQLBool (Just "checkDone") Nothing :>>= \checkDone -> 
+          NewRef sing (Just "checkDone") Nothing :>>= \checkDone -> 
           foldl (\doPs p -> SetRef checkDone T.false :>>= \_ ->            -- sequential execution of all PAClauses
                             paClause2SQL p checkDone :>>= \_ -> 
                             IfSQL (deref checkDone) doPs SQLNoop
@@ -171,7 +172,7 @@ eca2SQL fSpec@FSpec{originalContext,plugInfos} (ECA _ delta action _) =
      
         -- guarded choice; The rule is maintained if one of the clauses of which the expression is populated is executed.
         paClause2SQL (GCH ps _motive) = \k ->                                    -- PAClause case of GHC
-          NewRef SSQLBool (Just "checkDone") (Just T.false) :>>= \checkDone ->  
+          NewRef sing (Just "checkDone") (Just T.false) :>>= \checkDone ->  
           let fin = SetRef k (T.sql T.Or (deref checkDone) (deref k)) in
           foldl (\doPs (neg, gr, p) -> 
                    let nneg = case neg of { Ins -> id; Del -> T.sql T.Not } 

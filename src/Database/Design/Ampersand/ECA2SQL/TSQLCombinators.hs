@@ -8,6 +8,7 @@ module Database.Design.Ampersand.ECA2SQL.TSQLCombinators
 
 import Database.Design.Ampersand.ECA2SQL.TypedSQL hiding (In)  
 import Database.Design.Ampersand.ECA2SQL.Utils 
+import Database.Design.Ampersand.ECA2SQL.Singletons
 import qualified Language.SQL.SimpleSQL.Syntax as Sm 
 import Prelude (Maybe(..), error, (.), id, undefined, ($), Bool(..), String, (++)) -- This module is intended to be imported qualified
 import Control.Applicative (Applicative(..), (<$>))
@@ -33,9 +34,10 @@ class IndexInto (t :: SQLType) (indexk :: KProxy index) | t -> indexk where
 instance IndexInto ('SQLRow xs) ('KProxy :: KProxy Symbol) where 
   type GetAtIndex ('SQLRow xs) (nm :: Symbol) = LookupRec xs nm 
 
+{-
   (!) v@(SQLQueryVal x) i@(SSymbol pri) = 
     let strNm = Sm.Name $ TL.symbolVal pri in 
-    case typeOf v of { SSQLRow t -> 
+    case typeOf v of { t {-SSQLRow t-} -> 
     case lookupRec (sing2prod t) i of { r -> 
     withSingT r $ \_ ->  
       case isScalarType r of 
@@ -54,6 +56,7 @@ instance IndexInto ('SQLRow xs) ('KProxy :: KProxy Symbol) where
                    } 
      }}
   (!) _ _ = error "IndexInto{SQLRow}(!):impossible"
+-}
 
 instance IndexInto ('SQLRel ('SQLRow xs)) ('KProxy :: KProxy Symbol) where 
   type GetAtIndex ('SQLRel ('SQLRow xs)) (nm :: Symbol) = 'SQLRel (LookupRec xs nm)
@@ -72,6 +75,7 @@ data PrimSQLFunction (args :: [SQLType]) (out :: SQLType) where
   GroupBy :: PrimSQLFunction '[ 'SQLRel a, a ] ('SQLRel ('SQLRel a))
   SortBy  :: PrimSQLFunction '[ 'SQLRel a, a ] ('SQLRel a)
   Max, Min, Sum, Avg :: {- IsSQLNumeric a => -} PrimSQLFunction '[ 'SQLRel a ] a 
+  Alias :: (RecAssocs ts ~ RecAssocs ts') => PrimSQLFunction '[ 'SQLRel ('SQLRow ts) ] ('SQLRel ('SQLRow ts'))
 
 primSQL :: PrimSQLFunction args out -> Prod SQLVal args -> SQLVal out 
 primSQL PTrue = \PNil -> SQLScalarVal $ Sm.In True (Sm.NumLit "0") $ Sm.InList [Sm.NumLit "0"]

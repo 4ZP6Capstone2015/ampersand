@@ -170,7 +170,8 @@ library
                      Database.Design.Ampersand.ECA2SQL,
                      Database.Design.Ampersand.ECA2SQL.TypedSQL,
                      Database.Design.Ampersand.ECA2SQL.TSQLCombinators,
-                     Database.Design.Ampersand.ECA2SQL.Utils 
+                     Database.Design.Ampersand.ECA2SQL.Utils,
+                     Database.Design.Ampersand.ECA2SQL.Singletons  
 
                 
 executable ampersand

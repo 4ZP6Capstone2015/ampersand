@@ -30,6 +30,7 @@ import GHC.Exts (Constraint)
 import Data.Type.Equality ((:~:)(..))
 import Unsafe.Coerce 
 import Database.Design.Ampersand.ECA2SQL.Utils 
+import Database.Design.Ampersand.ECA2SQL.Singletons
 
 -- Basic model SQL types represented in Haskell 
 
@@ -48,21 +49,39 @@ data SQLRefType
   | SQLUnit 
   | SQLMethod [SQLType] SQLType 
 
--- Useful type synonyms 
+-- Useful type synonyms
 type SQLRow xs = 'Ty ('SQLRow xs) 
 type SQLVec xs = 'Ty ('SQLVec xs) 
 type SQLRel x = 'Ty ('SQLRel x) 
 type SQLAtom = 'Ty 'SQLAtom 
 type SQLBool = 'Ty 'SQLBool 
 
--- Singletong for SQL values. It is the same as SQL values by construction. 
+-- Singleton for SQLType 
 type SQLTypeS = (SingT :: SQLType -> *) 
-data instance SingT (x :: SQLType) where 
-  SSQLAtom :: SingT 'SQLAtom 
-  SSQLBool :: SingT 'SQLBool
-  SSQLRow :: NonEmpty ts => !(SingT ts) -> SingT ('SQLRow ts)
-  SSQLVec :: !(SingT ts) -> SingT ('SQLVec ts) 
-  SSQLRel :: !(SingT x) -> SingT ('SQLRel x) 
+
+type family WitnessTySQL (x :: SQLType) :: TyRep where 
+  WitnessTySQL 'SQLAtom = 'TyCtr "SQLType_SQLAtom" '[] 
+  WitnessTySQL 'SQLBool = 'TyCtr "SQLType_SQLBool" '[] 
+  WitnessTySQL ('SQLRel x) = 'TyCtr "SQLType_SQLRel" '[WitnessTySQL x] 
+  WitnessTySQL ('SQLRow x) = 'TyCtr "SQLType_SQLRow" '[WitnessTy x] 
+  WitnessTySQL ('SQLVec x) = 'TyCtr "SQLType_SQLVec" '[WitnessTy x] 
+
+type instance WitnessTy (x :: SQLType) = WitnessTySQL x 
+
+instance (WitnessSingI xs, NonEmpty xs) => WitnessSingI ('SQLRow xs) where witnessSing = WSQLRow witnessSing 
+instance (WitnessSingI xs) => WitnessSingI ('SQLVec xs) where witnessSing = WSQLVec witnessSing
+instance (WitnessSingI x) => WitnessSingI ('SQLRel x) where witnessSing = WSQLRel witnessSing 
+instance WitnessSingI 'SQLAtom where witnessSing = WSQLAtom 
+instance WitnessSingI 'SQLBool where witnessSing = WSQLBool 
+
+instance SingKind ('KProxy :: KProxy SQLType) where 
+  data SingKindWitness ('KProxy :: KProxy SQLType) x args where
+    WSQLAtom :: SingKindWitness 'KProxy 'SQLAtom    ( WitnessTySQL 'SQLAtom )
+    WSQLBool :: SingKindWitness 'KProxy 'SQLBool    ( WitnessTySQL 'SQLBool )
+    WSQLRel  :: SingKindWitness 'KProxy x (WitnessTySQL x) -> SingKindWitness 'KProxy ('SQLRel x) ( WitnessTySQL ('SQLRel x))
+    WSQLRow  :: SingKindWitness 'KProxy x (WitnessTy x) -> SingKindWitness 'KProxy ('SQLRow x) ( WitnessTySQL ('SQLRow x))
+    WSQLVec  :: SingKindWitness 'KProxy x (WitnessTy x) -> SingKindWitness 'KProxy ('SQLVec x) ( WitnessTySQL ('SQLVec x))
+
 
 -- Determine if a SQL type is a really a scalar type. 
 type family IsScalarType (x :: k) :: Bool where 
@@ -73,20 +92,16 @@ type family IsScalarType (x :: k) :: Bool where
   IsScalarType 'SQLAtom = 'True
   
 isScalarType :: SingT (x :: SQLType) -> SingT (IsScalarType x)
-isScalarType SSQLAtom = STrue 
-isScalarType SSQLBool = STrue 
-isScalarType (SSQLVec _vs0) = SFalse 
-isScalarType ((SSQLRow _ts0)) = SFalse 
-isScalarType (SSQLRel _) = SFalse   
-
--- Singletons for SQLType 
-instance (Sing xs, NonEmpty xs) => Sing ('SQLRow xs) where sing = SSQLRow sing 
-instance (Sing xs) => Sing ('SQLVec xs) where sing = SSQLVec sing
-instance (Sing x) => Sing ('SQLRel x) where sing = SSQLRel sing 
-instance Sing 'SQLAtom where sing = SSQLAtom 
-instance Sing 'SQLBool where sing = SSQLBool 
+isScalarType (SingT x) = 
+  case x of
+    WSQLAtom -> STrue 
+    WSQLBool -> STrue 
+    (WSQLVec _vs0) -> SFalse 
+    (WSQLRow _ts0) -> SFalse 
+    (WSQLRel _) -> SFalse   
 
 -- A SQL value contains value expressions. Using the constructors directly is unsafe. 
+-- The type of underlying prim expr is dependant on whether it is a scalar type or not. 
 data SQLVal (a :: SQLType) where 
   SQLScalarVal :: (IsScalarType a ~ 'True, Sing a) => ValueExpr -> SQLVal a 
   SQLQueryVal :: (IsScalarType a ~ 'False, Sing a) => QueryExpr -> SQLVal a 
@@ -95,6 +110,11 @@ data SQLVal (a :: SQLType) where
 typeOf :: SQLVal a -> SingT a 
 typeOf SQLScalarVal{} = sing 
 typeOf SQLQueryVal{} = sing 
+
+-- Get the argument of a relation
+argOfRel :: forall x . SingT ('SQLRel x) -> SingT x
+argOfRel (SingTEx (WSQLRel x) (STyCtr _ (STyCons y STyNil))) = SingTEx x y  
+argOfRel x = x `seq` error "argOfRel: impossible"                             
 
 -- Semantics in the interpreter. Underscores mark unsafe ctrs. 
 data SQLValSem (x :: SQLRefType) where 
@@ -134,6 +154,7 @@ unsafeSQLValFromQuery = SQLQueryVal
 deref :: forall x . SQLValRef x -> SQLVal x 
 deref (Ref_ nm) = unsafeSqlValFromName nm 
 
+{-
 instance DecideEq (SingT :: SQLType -> *) where 
   SSQLAtom %==  (SSQLAtom ) = Just Refl 
   SSQLBool %==  (SSQLBool ) = Just Refl 
@@ -144,6 +165,7 @@ instance DecideEq (SingT :: SQLType -> *) where
 
 instance (DecideEq (SingT :: k0 -> *), DecideEq (SingT :: k1 -> *)) => DecideEq (SingT :: RecLabel k0 k1 -> *) where 
   SRecLabel a0 b0 %== SRecLabel a1 b1 = liftA2 (cong2 Refl) (a0 %== a1) (b0 %== b1) 
+-}
 
 -- SQL statements
 
@@ -155,7 +177,7 @@ data TableSpec t where
 
 -- Safely create a table spec. 
 tableSpec :: NonEmpty x => Name -> Prod SingT x -> TableSpec x 
-tableSpec tn ty@PCons{} = MkTableSpec $ withSingT (SSQLRow $ prod2sing ty) $ const $ Ref_ tn 
+-- tableSpec tn ty@PCons{} = MkTableSpec $ withSingT (case prod2sing ty of { SingT w -> SingT $ WSQLRow w }) $ const $ Ref_ tn 
 tableSpec _ PNil = error "tableSpec: impossible"
 
 -- When the types and the shape, but not the names are known at runtime. The type of this is hideous
@@ -163,23 +185,23 @@ tableSpec _ PNil = error "tableSpec: impossible"
 someTableSpecShape :: NonEmpty (ts :: [SQLType]) => Name -> Prod (K String :*: SQLTypeS) ts 
               -> (forall (ks :: [RecLabel Symbol SQLType]) . Dict (NonEmpty ks) -> RecAssocs ks :~: ts -> TableSpec ks -> r) 
               -> r  -- Written with cps because expressing this with Exists is too hard..
-someTableSpecShape tn ts0 k0 = go ts0 (\q@Dict q' ps -> k0 q q' (tableSpec tn ps)) where 
-    go :: NonEmpty (ts :: [SQLType]) => Prod (K String :*: SQLTypeS) ts 
-       -> (forall (ks :: [RecLabel Symbol SQLType]) . Dict (NonEmpty ks) -> RecAssocs ks :~: ts -> Prod SingT ks -> r) 
-       -> r  
-    go PNil _ = error "someTableSpecShape:impossible"
-    go (PCons (K col :*: typ) PNil) k =  
-        val2sing symbolKindProxy col #>> \colNm -> k Dict Refl (PCons (SRecLabel colNm typ) PNil)
-    go (PCons (K col :*: typ) ts@PCons{}) k = 
-        val2sing symbolKindProxy col #>> \colNm -> 
-          go ts $ \case { Dict -> \case { Refl -> \ts' ->
-           k Dict Refl (PCons (SRecLabel colNm typ) ts')
-          }}
+someTableSpecShape tn ts0 k0 = undefined -- go ts0 (\q@Dict q' ps -> k0 q q' (tableSpec tn ps)) where 
+    -- go :: NonEmpty (ts :: [SQLType]) => Prod (K String :*: SQLTypeS) ts 
+    --    -> (forall (ks :: [RecLabel Symbol SQLType]) . Dict (NonEmpty ks) -> RecAssocs ks :~: ts -> Prod SingT ks -> r) 
+    --    -> r  
+    -- go PNil _ = error "someTableSpecShape:impossible"
+    -- go (PCons (K col :*: typ) PNil) k =  
+    --     val2sing symbolKindProxy col #>> \colNm -> k Dict Refl (PCons (SRecLabel colNm typ) PNil)
+    -- go (PCons (K col :*: typ) ts@PCons{}) k = 
+    --     val2sing symbolKindProxy col #>> \colNm -> 
+    --       go ts $ \case { Dict -> \case { Refl -> \ts' ->
+    --        k Dict Refl (PCons (SRecLabel colNm typ) ts')
+    --       }}
 
 someTableSpec :: Name -> [(String, Exists SQLTypeS)] -> Exists TableSpec 
-someTableSpec tn cols =  
-  someProd (map (\(nm,Ex t) -> val2sing symbolKindProxy nm #>> \nms -> Ex (nms `SRecLabel` t)) cols) 
-     #>> \case { PNil -> error "someTableSpec: empty list"; q@PCons{} -> Ex . tableSpec tn $ q }
+someTableSpec tn cols = undefined   
+  -- someProd (map (\(nm,Ex t) -> val2sing symbolKindProxy nm #>> \nms -> Ex (nms `SRecLabel` t)) cols) 
+  --    #>> \case { PNil -> error "someTableSpec: empty list"; q@PCons{} -> Ex . tableSpec tn $ q }
 
 -- A SQL method 
 data SQLMethod ts out where 
