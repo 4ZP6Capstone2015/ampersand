@@ -34,11 +34,10 @@ class IndexInto (t :: SQLType) (indexk :: KProxy index) | t -> indexk where
 instance IndexInto ('SQLRow xs) ('KProxy :: KProxy Symbol) where 
   type GetAtIndex ('SQLRow xs) (nm :: Symbol) = LookupRec xs nm 
 
-{-
   (!) v@(SQLQueryVal x) i@(SSymbol pri) = 
     let strNm = Sm.Name $ TL.symbolVal pri in 
-    case typeOf v of { t {-SSQLRow t-} -> 
-    case lookupRec (sing2prod t) i of { r -> 
+    case typeOf v of { t -> 
+    case lookupRec (colsOf t) i of { r -> 
     withSingT r $ \_ ->  
       case isScalarType r of 
         STrue -> SQLScalarVal $ 
@@ -56,7 +55,6 @@ instance IndexInto ('SQLRow xs) ('KProxy :: KProxy Symbol) where
                    } 
      }}
   (!) _ _ = error "IndexInto{SQLRow}(!):impossible"
--}
 
 instance IndexInto ('SQLRel ('SQLRow xs)) ('KProxy :: KProxy Symbol) where 
   type GetAtIndex ('SQLRel ('SQLRow xs)) (nm :: Symbol) = 'SQLRel (LookupRec xs nm)

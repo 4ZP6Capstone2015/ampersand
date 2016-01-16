@@ -76,11 +76,14 @@ instance WitnessSingI 'SQLBool where witnessSing = WSQLBool
 
 instance SingKind ('KProxy :: KProxy SQLType) where 
   data SingKindWitness ('KProxy :: KProxy SQLType) x args where
-    WSQLAtom :: SingKindWitness 'KProxy 'SQLAtom    ( WitnessTySQL 'SQLAtom )
-    WSQLBool :: SingKindWitness 'KProxy 'SQLBool    ( WitnessTySQL 'SQLBool )
-    WSQLRel  :: SingKindWitness 'KProxy x (WitnessTySQL x) -> SingKindWitness 'KProxy ('SQLRel x) ( WitnessTySQL ('SQLRel x))
-    WSQLRow  :: SingKindWitness 'KProxy x (WitnessTy x) -> SingKindWitness 'KProxy ('SQLRow x) ( WitnessTySQL ('SQLRow x))
-    WSQLVec  :: SingKindWitness 'KProxy x (WitnessTy x) -> SingKindWitness 'KProxy ('SQLVec x) ( WitnessTySQL ('SQLVec x))
+    WSQLAtom :: SingKindWitness 'KProxy 'SQLAtom    ( 'TyCtr "SQLType_SQLAtom" '[] )
+    WSQLBool :: SingKindWitness 'KProxy 'SQLBool    ( 'TyCtr "SQLType_SQLBool" '[] )
+    WSQLRel  :: SingKindWitness 'KProxy x xr
+             -> SingKindWitness 'KProxy ('SQLRel x) ( 'TyCtr "SQLType_SQLRel" '[xr] )
+    WSQLRow  :: SingKindWitness 'KProxy x xr
+             -> SingKindWitness 'KProxy ('SQLRow x) ( 'TyCtr "SQLType_SQLRow" '[xr] )
+    WSQLVec  :: SingKindWitness 'KProxy x xr 
+             -> SingKindWitness 'KProxy ('SQLVec x) ( 'TyCtr "SQLType_SQLVec" '[xr] )
 
 
 -- Determine if a SQL type is a really a scalar type. 
@@ -134,7 +137,31 @@ typeOfSem :: (f `IsElem` '[ 'SQLRef, 'Ty ]) => SQLValSem (f x) -> SQLTypeS x
 typeOfSem Ref_{} = sing 
 typeOfSem (Val x) = typeOf x 
 typeOfSem x = x `seq` error "typeOfSem: impossible" 
-  
+
+-- Get the columns of a sql row.   
+colsOf :: SingT ('SQLRow xs) -> Prod SingT xs
+colsOf (SingTEx (WSQLRow WNil) (STyCtr _ (STyCons m STyNil))) = PNil 
+colsOf (SingTEx (WSQLRow (WCons x xs)) (STyCtr nm (STyCons (STyCtr _ (STyCons q (STyCons q' _))) STyNil))) =   {- (STyCtr _ (STyCons m STyNil))) -}
+  PCons (SingTEx x q) (colsOf $ SingTEx (WSQLRow xs) (STyCtr Proxy (STyCons q' STyNil)))
+colsOf x = x `seq` error "colsOf:impossible"
+
+-- (colsOf (SingTEx (WSQLRow xs) (STyCtr nm (STyCons q STyNil)))) 
+
+
+  -- go :: SingKindWitness 'KProxy (x :: [SQLType]) xr -> TyRepSing (xr :: [TyRep]) -> Prod SingT x
+  -- go = undefined
+  -- go WNil _ = PNil 
+  -- go (WCons x xs) (STyCons q qs) = _ -- PCons undefined undefined
+
+
+  -- case (x,m) of 
+  --   (WNil, _) -> PNil 
+  --   (WCons x xs, STyCons x' xs') -> _ 
+  -- case (x,m) of 
+
+    -- (WNil, STyNil) -> PNil 
+    -- (WCons x xs, STyCons y ys) -> _ 
+
 -- A SQLValRef is a reference to a sql value in the domain of the semantic interpretation. 
 type SQLValRef x = SQLValSem ('SQLRef x)
 
@@ -153,19 +180,6 @@ unsafeSQLValFromQuery = SQLQueryVal
 
 deref :: forall x . SQLValRef x -> SQLVal x 
 deref (Ref_ nm) = unsafeSqlValFromName nm 
-
-{-
-instance DecideEq (SingT :: SQLType -> *) where 
-  SSQLAtom %==  (SSQLAtom ) = Just Refl 
-  SSQLBool %==  (SSQLBool ) = Just Refl 
-  SSQLRel  x %==  (SSQLRel  y) = fmap (cong Refl) (x %== y)
-  SSQLRow  ts0 %==  (SSQLRow  ts1) = fmap (cong Refl) (ts0 %== ts1)
-  SSQLVec  ts0 %==  (SSQLVec  ts1) = fmap (cong Refl) (ts0 %== ts1)
-  _ %== _ = Nothing 
-
-instance (DecideEq (SingT :: k0 -> *), DecideEq (SingT :: k1 -> *)) => DecideEq (SingT :: RecLabel k0 k1 -> *) where 
-  SRecLabel a0 b0 %== SRecLabel a1 b1 = liftA2 (cong2 Refl) (a0 %== a1) (b0 %== b1) 
--}
 
 -- SQL statements
 

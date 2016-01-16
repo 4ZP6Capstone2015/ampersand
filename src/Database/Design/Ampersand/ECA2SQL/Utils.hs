@@ -28,7 +28,6 @@ import Database.Design.Ampersand.ECA2SQL.Singletons
 
 instance IsString Name where fromString = Name 
 
-
 -- Given a functor `f', `Prod f' constructs the n-ary product category of `f'
 data Prod (f :: k -> *) (xs :: [k]) where 
   PNil :: Prod f '[] 
@@ -95,43 +94,14 @@ type family (&&) (x :: Bool) (y :: Bool) :: Bool where
 SFalse |&& _ = SFalse 
 _ |&& SFalse = SFalse 
 STrue |&& STrue = STrue 
-
-{-
-natEq :: NatSing a -> NatSing b -> DecEq a b 
-natEq SZ SZ = DecYes 
-natEq SZ{} SS{} = DecNo $ \case 
-natEq SS{} SZ{} = DecNo $ \case 
-natEq (SS n) (SS m) = mapDec Refl (\p -> p Refl) $ natEq n m 
-
-eqList :: (forall (x :: k) (y :: k) . SingT x -> SingT y -> DecEq x y) 
-       -> SingT (xs :: [k]) -> SingT (ys :: [k]) -> DecEq xs ys 
-eqList _ SNil SNil = DecYes 
-eqList f (SCons x xs) (SCons y ys) = 
-  case f x y of 
-    DecYes -> mapDec Refl (\p -> p Refl) $ eqList f xs ys 
-    DecNo p -> DecNo $ \case { Refl -> p Refl } 
-eqList _ SCons{} SNil{} = DecNo $ \case 
-eqList _ SNil{} SCons{} = DecNo $ \case 
-
-instance (DecideEq f) => DecideEq (Prod f) where 
-  PNil %== PNil = Just Refl 
-  PCons x xs %== PCons y ys = liftA2 (cong2 Refl) (x %== y) (xs %== ys) 
-  _ %== _ = Nothing 
-
-instance DecideEq (SingT :: Nat -> *) where 
-  SZ %== SZ = Just Refl 
-  SS n %== SS m = fmap (cong Refl) $ n %== m 
-  _ %== _ = Nothing 
-
-instance DecideEq (SingT :: Symbol -> *) where 
-  SSymbol s0 %== SSymbol s1 = sameSymbol s0 s1 
--}
+_ |&& _ = error "impossible"
 
 -- Symbol 
 symbolKindProxy = Proxy :: Proxy ('KProxy :: KProxy Symbol)
 
-compareSymbol' :: SingT x -> SingT y -> SingT (TL.CmpSymbol x y)
-compareSymbol' (SSymbol x) (SSymbol y) = compareSymbol x y  
+compareSymbol' :: SingT (x :: Symbol) -> SingT y -> SingT (TL.CmpSymbol x y)
+compareSymbol' (SingT (WSymbol x)) (SingT (WSymbol y)) = compareSymbol x y  
+compareSymbol' _ _ = error "impossible"
 
 compareSymbol :: forall x y . (TL.KnownSymbol x, TL.KnownSymbol y) => Proxy x -> Proxy y -> SingT (TL.CmpSymbol x y)
 compareSymbol x y =  
@@ -141,8 +111,6 @@ compareSymbol x y =
        LT -> case trustMe :: TL.CmpSymbol x y :~: 'LT of { Refl -> SLT }
        EQ -> case trustMe :: TL.CmpSymbol x y :~: 'EQ of { Refl -> SEQ }
        GT -> case trustMe :: TL.CmpSymbol x y :~: 'GT of { Refl -> SGT }
-
-
 
 type family RecAssocs (xs :: [RecLabel a b]) :: [b] where 
   RecAssocs '[] = '[] 
@@ -180,32 +148,7 @@ lookupRec PNil x = x `seq` error "lookupSing: impossible"
 --     SEQ -> ty 
 --     SLT -> lookupRec rest nm' 
 --     SGT -> lookupRec rest nm' 
-
-        
--- List 
-prod2sing :: Prod SingT xs -> SingT xs 
-prod2sing = undefined 
--- prod2sing PNil = SNil 
--- prod2sing (PCons x xs) = SCons x (prod2sing xs)
-
-sing2prod :: SingT xs -> Prod SingT xs 
-sing2prod = undefined 
--- sing2prod SNil = PNil 
--- sing2prod (SCons x xs) = x :> sing2prod xs 
-
-{-
-data instance SingT (x :: [k]) where 
-  SNil :: SingT '[] 
-  SCons :: !(SingT x) -> !(SingT xs) -> SingT (x ': xs) 
-type ListSing = (SingT :: [k] -> *) 
-instance All Sing xs => Sing xs where sing = prod2sing $ mkProdC (Proxy :: Proxy Sing) sing 
-
-instance (DecideEq (SingT :: k -> *)) => DecideEq (SingT :: [k] -> *) where 
-  SNil %== SNil = Just Refl 
-  SCons x xs %== SCons y ys = liftA2 (cong2 Refl) (x %== y) (xs %== ys) 
-  _ %== _ = Nothing 
--}
-
+ 
 -- Type level if. Note that this is STRICT 
 type family If (a :: Bool) (x :: k)(y :: k) :: k where 
   If 'True x y = x 
@@ -225,7 +168,6 @@ if_ap (IfA f) (IfA a) = IfA $
   case sing :: SingT cond of 
     STrue -> f a 
     SFalse -> f a 
-
 
 -- uncurry
 
