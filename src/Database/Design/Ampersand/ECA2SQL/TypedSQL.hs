@@ -75,15 +75,15 @@ instance WitnessSingI 'SQLAtom where witnessSing = WSQLAtom
 instance WitnessSingI 'SQLBool where witnessSing = WSQLBool 
 
 instance SingKind ('KProxy :: KProxy SQLType) where 
-  data SingKindWitness ('KProxy :: KProxy SQLType) x args where
-    WSQLAtom :: SingKindWitness 'KProxy 'SQLAtom    ( 'TyCtr "SQLType_SQLAtom" '[] )
-    WSQLBool :: SingKindWitness 'KProxy 'SQLBool    ( 'TyCtr "SQLType_SQLBool" '[] )
-    WSQLRel  :: SingKindWitness 'KProxy x xr
-             -> SingKindWitness 'KProxy ('SQLRel x) ( 'TyCtr "SQLType_SQLRel" '[xr] )
-    WSQLRow  :: SingKindWitness 'KProxy x xr
-             -> SingKindWitness 'KProxy ('SQLRow x) ( 'TyCtr "SQLType_SQLRow" '[xr] )
-    WSQLVec  :: SingKindWitness 'KProxy x xr 
-             -> SingKindWitness 'KProxy ('SQLVec x) ( 'TyCtr "SQLType_SQLVec" '[xr] )
+  data SingWitness ('KProxy :: KProxy SQLType) x args where
+    WSQLAtom :: SingWitness 'KProxy 'SQLAtom    ( 'TyCtr "SQLType_SQLAtom" '[] )
+    WSQLBool :: SingWitness 'KProxy 'SQLBool    ( 'TyCtr "SQLType_SQLBool" '[] )
+    WSQLRel  :: SingWitness 'KProxy x xr
+             -> SingWitness 'KProxy ('SQLRel x) ( 'TyCtr "SQLType_SQLRel" '[xr] )
+    WSQLRow  :: SingWitness 'KProxy x xr
+             -> SingWitness 'KProxy ('SQLRow x) ( 'TyCtr "SQLType_SQLRow" '[xr] )
+    WSQLVec  :: SingWitness 'KProxy x xr 
+             -> SingWitness 'KProxy ('SQLVec x) ( 'TyCtr "SQLType_SQLVec" '[xr] )
 
 
 -- Determine if a SQL type is a really a scalar type. 
