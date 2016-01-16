@@ -68,7 +68,7 @@ type family TyRepOfSQL (x :: SQLType) :: TyRep where
 
 type instance TyRepOf (x :: SQLType) = TyRepOfSQL x 
 
-instance (WitnessSingI xs, NonEmpty xs) => WitnessSingI ('SQLRow xs) where witnessSing = WSQLRow witnessSing 
+instance (WitnessSingI xs, NonEmpty xs, UniqueOrderedLabels xs) => WitnessSingI ('SQLRow xs) where witnessSing = WSQLRow witnessSing 
 instance (WitnessSingI xs) => WitnessSingI ('SQLVec xs) where witnessSing = WSQLVec witnessSing
 instance (WitnessSingI x) => WitnessSingI ('SQLRel x) where witnessSing = WSQLRel witnessSing 
 instance WitnessSingI 'SQLAtom where witnessSing = WSQLAtom 
@@ -80,7 +80,7 @@ instance SingKind ('KProxy :: KProxy SQLType) where
     WSQLBool :: SingWitness 'KProxy 'SQLBool    ( 'TyCtr "SQLType_SQLBool" '[] )
     WSQLRel  :: SingWitness 'KProxy x xr
              -> SingWitness 'KProxy ('SQLRel x) ( 'TyCtr "SQLType_SQLRel" '[xr] )
-    WSQLRow  :: SingWitness 'KProxy x xr
+    WSQLRow  :: UniqueOrderedLabels x => SingWitness 'KProxy x xr
              -> SingWitness 'KProxy ('SQLRow x) ( 'TyCtr "SQLType_SQLRow" '[xr] )
     WSQLVec  :: SingWitness 'KProxy x xr 
              -> SingWitness 'KProxy ('SQLVec x) ( 'TyCtr "SQLType_SQLVec" '[xr] )
@@ -117,7 +117,6 @@ typeOf SQLQueryVal{} = sing
 -- Get the argument of a relation
 argOfRel :: forall x . SingT ('SQLRel x) -> SingT x
 argOfRel (SingT (WSQLRel x)) = SingT x 
-argOfRel x = x `seq` error "argOfRel: impossible"                             
 
 -- Semantics in the interpreter. Underscores mark unsafe ctrs. 
 data SQLValSem (x :: SQLRefType) where 
@@ -140,9 +139,10 @@ typeOfSem x = x `seq` error "typeOfSem: impossible"
 
 -- Get the columns of a sql row.   
 colsOf :: SingT ('SQLRow xs) -> Prod SingT xs
-colsOf (SingT (WSQLRow WNil)) = PNil 
-colsOf (SingT (WSQLRow (WCons x xs))) = PCons (SingT x) (colsOf $ SingT $ WSQLRow xs)  
-colsOf x = x `seq` error "colsOf:impossible"
+colsOf (SingT (WSQLRow r)) = go r where 
+  go :: forall x xr . SingWitness 'KProxy (x :: [RecLabel Symbol SQLType]) xr -> Prod SingT x 
+  go WNil = PNil 
+  go (WCons x xs) = PCons (SingT x) (go xs) 
 
 -- A SQLValRef is a reference to a sql value in the domain of the semantic interpretation. 
 type SQLValRef x = SQLValSem ('SQLRef x)
@@ -151,9 +151,10 @@ type SQLValRef x = SQLValSem ('SQLRef x)
 type SQLMethodRef args out = SQLValSem ('SQLMethod args out) 
 
 unsafeSqlValFromName :: forall x . Sing x => Name -> SQLVal x 
-unsafeSqlValFromName nm = case isScalarType (sing :: SingT x) of 
-                            STrue -> SQLScalarVal $ Iden [nm] 
-                            SFalse -> SQLQueryVal $ Table [nm] 
+unsafeSqlValFromName nm = 
+  elimSingT (isScalarType (sing :: SingT x)) $ \case 
+    WTrue -> SQLScalarVal $ Iden [nm] 
+    WFalse -> SQLQueryVal $ Table [nm] 
 
 -- Unsafely generate a SQL value representing a query statement
 -- from an untype QueryExpr. 
@@ -172,8 +173,8 @@ data TableSpec t where
   TableAlias  :: (RecAssocs t0 ~ RecAssocs t1) => TableSpec t0 -> TableSpec t1 
 
 -- Safely create a table spec. 
-tableSpec :: NonEmpty x => Name -> Prod SingT x -> TableSpec x 
--- tableSpec tn ty@PCons{} = MkTableSpec $ withSingT (case prod2sing ty of { SingT w -> SingT $ WSQLRow w }) $ const $ Ref_ tn 
+tableSpec :: (UniqueOrderedLabels x, NonEmpty x) => Name -> Prod SingT x -> TableSpec x 
+tableSpec tn ty@PCons{} = MkTableSpec $ withSingT (case prod2sing ty of { SingT w -> SingT $ WSQLRow w }) $ \_ -> Ref_ tn 
 tableSpec _ PNil = error "tableSpec: impossible"
 
 -- When the types and the shape, but not the names are known at runtime. The type of this is hideous

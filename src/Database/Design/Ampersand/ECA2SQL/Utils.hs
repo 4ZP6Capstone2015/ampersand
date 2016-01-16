@@ -33,6 +33,21 @@ data Prod (f :: k -> *) (xs :: [k]) where
   PNil :: Prod f '[] 
   PCons :: f x -> Prod f xs -> Prod f (x ': xs) 
 
+prod2sing :: forall xs . (SingKind ('KProxy :: KProxy k)) => Prod SingT (xs :: [k]) -> SingT (xs :: [k])
+prod2sing x0 = SingT (go x0) where 
+  go :: forall (xs' :: [k]) . Prod SingT xs' -> SingWitness 'KProxy xs' (TyRepOf xs')
+  go PNil = WNil 
+  go (PCons (SingT x) xs) = 
+    case witness x of 
+      (Refl, Dict) -> WCons x (go xs) 
+
+sing2prod :: forall xs . (SingKind ('KProxy :: KProxy k)) => SingT (xs :: [k]) -> Prod SingT (xs :: [k]) 
+sing2prod (SingT x0) = go x0 where 
+  go :: forall (xs' :: [k]) rep . SingWitness 'KProxy xs' rep -> Prod SingT xs'
+  go WNil = PNil 
+  go (WCons x xs) = PCons (SingT x) (go xs) 
+  
+  
 infixr 5 :> 
 pattern x :> xs = PCons x xs 
 
@@ -91,7 +106,6 @@ symbolKindProxy = Proxy :: Proxy ('KProxy :: KProxy Symbol)
 
 compareSymbol' :: SingT (x :: Symbol) -> SingT y -> SingT (TL.CmpSymbol x y)
 compareSymbol' (SingT (WSymbol x)) (SingT (WSymbol y)) = compareSymbol x y  
-compareSymbol' _ _ = error "impossible"
 
 compareSymbol :: forall x y . (TL.KnownSymbol x, TL.KnownSymbol y) => Proxy x -> Proxy y -> SingT (TL.CmpSymbol x y)
 compareSymbol x y =  
@@ -119,8 +133,8 @@ type family CaseOrdering (x :: Ordering) (a :: k) (b :: k) (c :: k) :: k where
 type family UniqueOrdered (xs :: [Symbol]) :: Constraint where 
   UniqueOrdered '[] = () 
   UniqueOrdered '[ a ] = () 
-  UniqueOrdered (a ': b ': r) = (TL.CmpSymbol a b ~ LT, UniqueOrdered (b ': r))
-
+  UniqueOrdered (a ': b ': r) = (TL.CmpSymbol a b ~ 'LT, TL.CmpSymbol b a ~ 'GT, UniqueOrdered (b ': r))
+ 
 type UniqueOrderedLabels xs = UniqueOrdered (RecLabels xs) 
 
 -- Lookup a value in a list of rec labels 
@@ -133,11 +147,11 @@ type family LookupIx (xs :: [k]) (i :: TL.Nat) :: k where
 
 lookupRec :: forall (xs :: [RecLabel Symbol b]) (nm :: Symbol) (r :: b) . (LookupRec xs nm ~ r) => Prod SingT xs -> SingT nm -> SingT r 
 lookupRec PNil x = x `seq` error "lookupSing: impossible" 
--- lookupRec (PCons (SRecLabel nm ty) rest) nm' = 
---   case undefined of -- compareSymbol' (SingT nm) (SingT nm') of 
---     SEQ -> ty 
---     SLT -> lookupRec rest nm' 
---     SGT -> lookupRec rest nm' 
+lookupRec (PCons (SingT (WRecLabel nm ty)) rest) nm' =  
+  elimSingT (compareSymbol' (SingT nm) nm') $ \case 
+    WEQ -> SingT ty 
+    WLT -> lookupRec rest nm' 
+    WGT -> lookupRec rest nm' 
  
 -- Type level if. Note that this is STRICT 
 type family If (a :: Bool) (x :: k)(y :: k) :: k where 
@@ -149,15 +163,15 @@ newtype IfA (c :: Bool) (x :: *) (y :: *) = IfA { getIfA :: If c x y }
 
 if_pure :: forall a b cond . Sing cond => a -> b -> IfA cond a b 
 if_pure a b = IfA $ 
-  case sing :: SingT cond of 
-    STrue -> a 
-    SFalse -> b 
+  elimSingT (sing :: SingT cond) $ \case 
+    WTrue -> a 
+    WFalse -> b 
 
 if_ap :: forall a b a' b' cond. Sing cond => IfA cond (a -> a') (b -> b') -> IfA cond a b -> IfA cond a' b' 
 if_ap (IfA f) (IfA a) = IfA $ 
-  case sing :: SingT cond of 
-    STrue -> f a 
-    SFalse -> f a 
+  elimSingT (sing :: SingT cond) $ \case 
+    WTrue -> f a 
+    WFalse -> f a 
 
 -- uncurry
 
