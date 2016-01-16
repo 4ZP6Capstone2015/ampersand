@@ -59,14 +59,14 @@ type SQLBool = 'Ty 'SQLBool
 -- Singleton for SQLType 
 type SQLTypeS = (SingT :: SQLType -> *) 
 
-type family WitnessTySQL (x :: SQLType) :: TyRep where 
-  WitnessTySQL 'SQLAtom = 'TyCtr "SQLType_SQLAtom" '[] 
-  WitnessTySQL 'SQLBool = 'TyCtr "SQLType_SQLBool" '[] 
-  WitnessTySQL ('SQLRel x) = 'TyCtr "SQLType_SQLRel" '[WitnessTySQL x] 
-  WitnessTySQL ('SQLRow x) = 'TyCtr "SQLType_SQLRow" '[WitnessTy x] 
-  WitnessTySQL ('SQLVec x) = 'TyCtr "SQLType_SQLVec" '[WitnessTy x] 
+type family TyRepOfSQL (x :: SQLType) :: TyRep where 
+  TyRepOfSQL 'SQLAtom = 'TyCtr "SQLType_SQLAtom" '[] 
+  TyRepOfSQL 'SQLBool = 'TyCtr "SQLType_SQLBool" '[] 
+  TyRepOfSQL ('SQLRel x) = 'TyCtr "SQLType_SQLRel" '[TyRepOfSQL x] 
+  TyRepOfSQL ('SQLRow x) = 'TyCtr "SQLType_SQLRow" '[TyRepOf x] 
+  TyRepOfSQL ('SQLVec x) = 'TyCtr "SQLType_SQLVec" '[TyRepOf x] 
 
-type instance WitnessTy (x :: SQLType) = WitnessTySQL x 
+type instance TyRepOf (x :: SQLType) = TyRepOfSQL x 
 
 instance (WitnessSingI xs, NonEmpty xs) => WitnessSingI ('SQLRow xs) where witnessSing = WSQLRow witnessSing 
 instance (WitnessSingI xs) => WitnessSingI ('SQLVec xs) where witnessSing = WSQLVec witnessSing
