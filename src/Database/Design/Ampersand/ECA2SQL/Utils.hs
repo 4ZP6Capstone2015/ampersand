@@ -21,7 +21,8 @@ import GHC.TypeLits (Symbol, symbolVal, sameSymbol, KnownSymbol)
 import qualified GHC.TypeLits as TL  
 import GHC.Exts (Constraint)
 import Data.Type.Equality ((:~:)(..))
-import GHC.Exts (IsString(..))
+import GHC.Exts (IsString(..), Any)
+import qualified GHC.Exts as Exts 
 import Language.SQL.SimpleSQL.Syntax (Name(..))
 import Database.Design.Ampersand.ECA2SQL.Equality 
 import Database.Design.Ampersand.ECA2SQL.Singletons
@@ -130,28 +131,98 @@ type family CaseOrdering (x :: Ordering) (a :: k) (b :: k) (c :: k) :: k where
   CaseOrdering 'GT a b c = c 
 
 --
+{-
+type family IsUniqueOrdered (xs :: [Symbol]) :: Bool where 
+  IsUniqueOrdered '[] = 'True  
+  IsUniqueOrdered '[ a ] = 'True 
+  IsUniqueOrdered (a ': b ': r) = CaseOrdering (TL.CmpSymbol a b) (IsUniqueOrdered (b ': r)) 'False 'False 
+
 type family UniqueOrdered (xs :: [Symbol]) :: Constraint where 
   UniqueOrdered '[] = () 
   UniqueOrdered '[ a ] = () 
   UniqueOrdered (a ': b ': r) = (TL.CmpSymbol a b ~ 'LT, TL.CmpSymbol b a ~ 'GT, UniqueOrdered (b ': r))
  
 type UniqueOrderedLabels xs = UniqueOrdered (RecLabels xs) 
+-}
+
+-- type family IsSetRec_ (xs :: [k]) (seen :: [k]) :: Bool where 
+--   IsSetRec_ '[] seen = 'True 
+--   IsSetRec_ (x ': xs) seen = 
+
+type family (==) (a :: k) (b :: k) :: Bool where 
+  (==) a a = 'True 
+  (==) a b = 'False 
+
+type family IsNotElem (xs :: [k]) (x :: k) :: Constraint where 
+  IsNotElem '[] x = () 
+  IsNotElem (x ': xs) y = ((x == y) ~ 'False, IsNotElem xs y)
+
+type family IsSetRec_ (xs :: [RecLabel a b]) (seen :: [a]) :: Constraint where 
+  IsSetRec_ '[] s = ()  
+  IsSetRec_ ( (a ::: t0) ': r) seen = 
+    (IsNotElem seen a, IsSetRec_ r (a ': seen))
+
+type family IsSetRec (xs :: [RecLabel a b]) :: Constraint where 
+  IsSetRec xs = IsSetRec_ xs '[] 
+
+data SetRec (xs :: [RecLabel a b]) where 
+  SetRec :: IsSetRec xs => SingT xs -> SetRec xs 
+
+openSetRec :: (SingKind ('KProxy :: KProxy k)) => SetRec (xs :: [RecLabel k k']) -> (IsSetRec xs => r) -> r
+openSetRec = undefined 
+-- openSetRec SetRec_Nil k = k 
+-- openSetRec SetRec_Singl k = k 
+-- openSetRec (SetRec_More Refl r) k = openSetRec r k 
+
+decSetRec :: (SingKind ('KProxy :: KProxy a)) => SingT (xs :: [RecLabel a b]) -> Dec (SetRec xs)
+decSetRec = undefined 
+-- decSetRec (SingT WNil) = Yes SetRec_Nil 
+-- decSetRec (SingT (WCons _ WNil)) = Yes SetRec_Singl 
+
+-- decSetRec (SingT (WCons (WRecLabel x _) r@(WCons (WRecLabel y _) _))) = 
+--   case SingT x %== SingT y of 
+--     Yes q -> No $ \q' -> q' `seq` (\case{} $ q)
+--     No  q -> 
+--       case decSetRec (SingT r) of 
+--         Yes p -> Yes (SetRec_More (q `seq` unsafeCoerce (Refl :: () :~: ())) p)
+--         No  p -> No $ \case { SetRec_More _ p' -> p p' }
+
+
+
+type family IsJust (x :: Maybe k) :: k where 
+  IsJust ('Just x) = x 
 
 -- Lookup a value in a list of rec labels 
 type family LookupRec (xs :: [RecLabel Symbol k]) (x :: Symbol) :: k where 
-  LookupRec ( (nm ::: ty) ': rest ) nm' = CaseOrdering (TL.CmpSymbol nm nm') (LookupRec rest nm') ty (LookupRec rest nm') 
+  LookupRec xs x = IsJust (LookupRecM xs x)
+--   LookupRec ( (nm ::: ty) ': rest ) nm' = CaseOrdering (TL.CmpSymbol nm nm') (LookupRec rest nm') ty (LookupRec rest nm') 
+
+type family LookupRecM (xs :: [RecLabel Symbol k]) (x :: Symbol) :: Maybe k where 
+  LookupRecM '[] nm = 'Nothing 
+  LookupRecM ( (nm ::: ty) ': rest ) nm' = CaseOrdering (TL.CmpSymbol nm nm') (LookupRecM rest nm') ('Just ty) (LookupRecM rest nm') 
+
+lookupRecM :: forall (xs :: [RecLabel Symbol k]) (x :: Symbol) . SingT xs -> SingT x -> SingT (LookupRecM xs x)
+lookupRecM (SingT xs0) (SingT x0) = go xs0 x0 where 
+  go :: forall (xs' :: [RecLabel Symbol k]) (x' :: Symbol) x_rep x_rep1 
+      . SingWitness 'KProxy xs' x_rep -> SingWitness 'KProxy x' x_rep1 -> SingT (LookupRecM xs' x')
+  go WNil _ = SingT WNothing 
+  go (WCons (WRecLabel (WSymbol nm') ty) xs) nms@(WSymbol nm) = 
+    elimSingT (compareSymbol nm' nm) $ \case 
+      WLT -> go xs nms 
+      WEQ -> SingT (WJust ty) 
+      WGT -> go xs nms 
+      
 
 type family LookupIx (xs :: [k]) (i :: TL.Nat) :: k where 
   LookupIx ( x ': xs ) 0 = x 
   LookupIx ( x ': xs ) n = LookupIx xs (n TL.- 1)
 
-lookupRec :: forall (xs :: [RecLabel Symbol b]) (nm :: Symbol) (r :: b) . (LookupRec xs nm ~ r) => Prod SingT xs -> SingT nm -> SingT r 
-lookupRec PNil x = x `seq` error "lookupSing: impossible" 
-lookupRec (PCons (SingT (WRecLabel nm ty)) rest) nm' =  
-  elimSingT (compareSymbol' (SingT nm) nm') $ \case 
-    WEQ -> SingT ty 
-    WLT -> lookupRec rest nm' 
-    WGT -> lookupRec rest nm' 
+lookupRec :: forall (xs :: [RecLabel Symbol b]) (nm :: Symbol) (r :: b) . (LookupRec xs nm ~ r) => SingT xs -> SingT nm -> SingT r 
+lookupRec row nm = 
+  elimSingT (lookupRecM row nm) $ \case 
+    WJust r -> SingT r 
+    WNothing -> error "lookupRec: impossible"
+
  
 -- Type level if. Note that this is STRICT 
 type family If (a :: Bool) (x :: k)(y :: k) :: k where 
