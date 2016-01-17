@@ -1,0 +1,15 @@
+CONTEXT ecaRules IN ENGLISH
+--Test file for ECA test
+
+PURPOSE RULE "Delete Person"
+{+Someone gets fired-}
+ROLE "ExecEngine" MAINTAINS "Delete Person"
+RULE "Delete Person" :  person~;assignee |- pl\/member
+VIOLATION ( TXT "DelAtom;Person;", SRC I)
+
+
+PURPOSE RULE "Member cannot be in more than one project"
+{+ Worker cannot be a member of multiple project teams-}
+ROLE "ExecEngine" MAINTAINS "Person cannot be members of multiple teams"
+RULE "Person are not members of more than 1 team": pl |- ((pl\/member)~;(pl\/member))-
+VIOLATION ( TXT "DelPair;member;Project;", SRC I, TXT ";Person;", TGT I)
