@@ -68,7 +68,7 @@ type family TyRepOfSQL (x :: SQLType) :: TyRep where
 
 type instance TyRepOf (x :: SQLType) = TyRepOfSQL x 
 
-instance (WitnessSingI xs, NonEmpty xs, UniqueOrderedLabels xs) => WitnessSingI ('SQLRow xs) where witnessSing = WSQLRow witnessSing 
+instance (WitnessSingI xs, NonEmpty xs, IsSetRec xs) => WitnessSingI ('SQLRow xs) where witnessSing = WSQLRow witnessSing 
 instance (WitnessSingI xs) => WitnessSingI ('SQLVec xs) where witnessSing = WSQLVec witnessSing
 instance (WitnessSingI x) => WitnessSingI ('SQLRel x) where witnessSing = WSQLRel witnessSing 
 instance WitnessSingI 'SQLAtom where witnessSing = WSQLAtom 
@@ -80,7 +80,7 @@ instance SingKind ('KProxy :: KProxy SQLType) where
     WSQLBool :: SingWitness 'KProxy 'SQLBool    ( 'TyCtr "SQLType_SQLBool" '[] )
     WSQLRel  :: SingWitness 'KProxy x xr
              -> SingWitness 'KProxy ('SQLRel x) ( 'TyCtr "SQLType_SQLRel" '[xr] )
-    WSQLRow  :: UniqueOrderedLabels x => SingWitness 'KProxy x xr
+    WSQLRow  :: (NonEmpty x, IsSetRec x) => SingWitness 'KProxy x xr
              -> SingWitness 'KProxy ('SQLRow x) ( 'TyCtr "SQLType_SQLRow" '[xr] )
     WSQLVec  :: SingWitness 'KProxy x xr 
              -> SingWitness 'KProxy ('SQLVec x) ( 'TyCtr "SQLType_SQLVec" '[xr] )
@@ -138,11 +138,8 @@ typeOfSem (Val x) = typeOf x
 typeOfSem x = x `seq` error "typeOfSem: impossible" 
 
 -- Get the columns of a sql row.   
-colsOf :: SingT ('SQLRow xs) -> Prod SingT xs
-colsOf (SingT (WSQLRow r)) = go r where 
-  go :: forall x xr . SingWitness 'KProxy (x :: [RecLabel Symbol SQLType]) xr -> Prod SingT x 
-  go WNil = PNil 
-  go (WCons x xs) = PCons (SingT x) (go xs) 
+colsOf :: SingT ('SQLRow xs) -> SingT xs
+colsOf (SingT (WSQLRow r)) = SingT r 
 
 -- A SQLValRef is a reference to a sql value in the domain of the semantic interpretation. 
 type SQLValRef x = SQLValSem ('SQLRef x)
@@ -173,34 +170,42 @@ data TableSpec t where
   TableAlias  :: (RecAssocs t0 ~ RecAssocs t1) => TableSpec t0 -> TableSpec t1 
 
 -- Safely create a table spec. 
-tableSpec :: (UniqueOrderedLabels x, NonEmpty x) => Name -> Prod SingT x -> TableSpec x 
-tableSpec tn ty@PCons{} = MkTableSpec $ withSingT (case prod2sing ty of { SingT w -> SingT $ WSQLRow w }) $ \_ -> Ref_ tn 
-tableSpec _ PNil = error "tableSpec: impossible"
+tableSpec :: (IsSetRec x, NonEmpty x) => Name -> SingT x -> TableSpec x 
+tableSpec tn xs@(SingT x) = 
+  case x of 
+    WNil -> error "tableSpec: impossible"
+    WCons{} -> MkTableSpec $ withSingT xs $ \_ -> Ref_ tn 
 
--- When the types and the shape, but not the names are known at runtime. The type of this is hideous
--- and it should be deleted. 
-someTableSpecShape :: NonEmpty (ts :: [SQLType]) => Name -> Prod (K String :*: SQLTypeS) ts 
-              -> (forall (ks :: [RecLabel Symbol SQLType]) . Dict (NonEmpty ks) -> RecAssocs ks :~: ts -> TableSpec ks -> r) 
-              -> r  -- Written with cps because expressing this with Exists is too hard..
-someTableSpecShape tn ts0 k0 = error "someTableSpecShape: TODO"
-
- -- go ts0 (\q@Dict q' ps -> k0 q q' (tableSpec tn ps)) where 
-    -- go :: NonEmpty (ts :: [SQLType]) => Prod (K String :*: SQLTypeS) ts 
-    --    -> (forall (ks :: [RecLabel Symbol SQLType]) . Dict (NonEmpty ks) -> RecAssocs ks :~: ts -> Prod SingT ks -> r) 
-    --    -> r  
-    -- go PNil _ = error "someTableSpecShape:impossible"
-    -- go (PCons (K col :*: typ) PNil) k =  
-    --     val2sing symbolKindProxy col #>> \colNm -> k Dict Refl (PCons (SRecLabel colNm typ) PNil)
-    -- go (PCons (K col :*: typ) ts@PCons{}) k = 
-    --     val2sing symbolKindProxy col #>> \colNm -> 
-    --       go ts $ \case { Dict -> \case { Refl -> \ts' ->
-    --        k Dict Refl (PCons (SRecLabel colNm typ) ts')
-    --       }}
-
+-- Create an table spec from runtime information. Returns Nothing if the table
+-- would not be valid. 
 someTableSpec :: Name -> [(String, Exists SQLTypeS)] -> Exists TableSpec 
-someTableSpec tn cols = error "someTableSpec: TODO"   
+someTableSpec tn cols = undefined 
+  
+  -- ind :: Proxy x1 -> Proxy xs2 -> Proxy x -> x :~: x1 -> Dict (IsSetRec (x1 ': xs2)) -> Dict (IsSetRec (x ': x1 ': xs2))
+  -- ind _ _ _ Refl Dict = Dict 
+
+  -- go :: forall xs . (SingKind ('KProxy :: KProxy (RecLabel a b))) => SingT (xs :: [RecLabel a b]) -> Maybe (Dict (IsSetRec xs)) 
+  -- go (SingT x) = 
+  --   case x of 
+  --     WCons x (WCons y r) -> 
+  --       case SingT x %== SingT y of 
+  --         Yes q -> 
+  --           case go (SingT ( WCons y r )) of 
+  --             Just p -> Just (_ q p)   
+
+  --       -- case (x %== y, go (WCons y r)) of 
+  --       --   (Yes Refl, Just Dict) -> _ 
+
+  --     WCons x WNil -> Just Dict 
+  --     WNil -> Just Dict 
+
+  -- | validTable =  
+
+{- someProd (map (\(nm,Ex (SingT t)) -> val2sing symbolKindProxy nm $ \(SingT nms) -> Ex (nms `SRecLabel` t)) cols)
+   #>> \case { PNil -> error "someTableSpec: empty list"; q@PCons{} -> Ex . tableSpec tn $ q } -}
   -- someProd (map (\(nm,Ex t) -> val2sing symbolKindProxy nm #>> \nms -> Ex (nms `SRecLabel` t)) cols) 
   --    #>> \case { PNil -> error "someTableSpec: empty list"; q@PCons{} -> Ex . tableSpec tn $ q }
+
 
 -- A SQL method 
 data SQLMethod ts out where 

@@ -91,8 +91,7 @@ decl2TableSpec fSpec decl =
           Sgn{} -> getDeclarationTableInfo fSpec decl 
           Isn{} -> let (p,a) = getConceptTableInfo fSpec (detyp decl) in (p,a,a)
           Vs{}  -> error "decl2TableSpec: V[_,_] not expected here"
-  in someTableSpecShape (QName $ name plug) (PCons (K (name src) :*: SingT WSQLAtom) $ PCons (K (name tgt) :*: SingT WSQLAtom) PNil) $
-      \case { Dict -> \case { Refl -> \tbl -> TableAlias tbl }}
+  in tableSpec (QName $ name plug) sing 
 
 -- TODO: This function could do with some comments 
 -- TODO: Test eca2SQL
