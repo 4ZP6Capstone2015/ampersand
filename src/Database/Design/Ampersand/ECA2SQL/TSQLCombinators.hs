@@ -7,8 +7,8 @@ module Database.Design.Ampersand.ECA2SQL.TSQLCombinators
   ) where 
 
 import Database.Design.Ampersand.ECA2SQL.TypedSQL hiding (In)  
-import Database.Design.Ampersand.ECA2SQL.Utils 
-import Database.Design.Ampersand.ECA2SQL.Singletons
+import Database.Design.Ampersand.ECA2SQL.Utils hiding (Not)
+import Database.Design.Ampersand.ECA2SQL.Singletons 
 import qualified Language.SQL.SimpleSQL.Syntax as Sm 
 import Prelude (Maybe(..), error, (.), id, undefined, ($), Bool(..), String, (++)) -- This module is intended to be imported qualified
 import Control.Applicative (Applicative(..), (<$>))

@@ -149,9 +149,17 @@ type UniqueOrderedLabels xs = UniqueOrdered (RecLabels xs)
 --   IsSetRec_ '[] seen = 'True 
 --   IsSetRec_ (x ': xs) seen = 
 
-type family (==) (a :: k) (b :: k) :: Bool where 
-  (==) a a = 'True 
-  (==) a b = 'False 
+eq_is_eq :: (x == y) :~: 'True -> x :~: y 
+eq_is_eq Refl = triviallyTrue
+
+neq_is_neq :: ((x :~: y) -> Void) -> (x == y) :~: 'False 
+neq_is_neq = undefined 
+
+decEq :: SingKind ('KProxy :: KProxy a) => SingT (x :: a) -> SingT (y :: a) -> SingT (x == y) 
+decEq x y = 
+  case x %== y of 
+    Yes Refl -> STrue 
+    -- No q     -> case neq_is_neq q of { Refl -> SFalse }
 
 type family IsNotElem (xs :: [k]) (x :: k) :: Constraint where 
   IsNotElem '[] x = () 
@@ -165,8 +173,15 @@ type family IsSetRec_ (xs :: [RecLabel a b]) (seen :: [a]) :: Constraint where
 type family IsSetRec (xs :: [RecLabel a b]) :: Constraint where 
   IsSetRec xs = IsSetRec_ xs '[] 
 
-data SetRec (xs :: [RecLabel a b]) where 
-  SetRec :: IsSetRec xs => SingT xs -> SetRec xs 
+data NotElem (xs :: [k]) (x :: k) where 
+  NotElemNil :: NotElem '[] x 
+  NotElemCons :: ((x :~: y) -> Void) -> NotElem xs y -> NotElem (x ': xs) y 
+
+data SetRec_ (seen :: [a]) (xs :: [RecLabel a b]) where 
+  SetRecNil :: SetRec_ s '[] 
+  SetRecCOns :: NotElem seen a -> SetRec_ (a ': seen) r -> SetRec_ seen ((a ::: t0) ': r) 
+
+type SetRec = SetRec_ '[] 
 
 openSetRec :: (SingKind ('KProxy :: KProxy k)) => SetRec (xs :: [RecLabel k k']) -> (IsSetRec xs => r) -> r
 openSetRec = undefined 

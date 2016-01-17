@@ -56,7 +56,8 @@ library
                      xlsx == 0.2.*,
                      zlib == 0.5.*,
                      wl-pprint,
-                     MissingH
+                     MissingH,
+                     deepseq >= 1.4.0.0 
 
   exposed-modules:
                      Database.Design.Ampersand,
