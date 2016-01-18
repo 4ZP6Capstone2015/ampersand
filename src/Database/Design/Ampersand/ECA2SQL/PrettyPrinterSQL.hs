@@ -13,7 +13,6 @@ import Data.List (intercalate,intersperse)
 import Data.List.Utils (replace)
 import Data.Char (toUpper)
 
---TableSpec ts -> SQLVal ('SQLRel ('SQLRow ts))
 instance Pretty (SQLSt k v) where
 
     pretty (Insert tableSpec expr2ins) = text "INSERT INTO" <+> (text $ showTableSpec tableSpec) <+> text "VALUES " <+> lparen  <+> (text $ showSQLRow expr2ins) <+> rparen 
