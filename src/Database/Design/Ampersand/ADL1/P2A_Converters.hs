@@ -1,5 +1,6 @@
 -- {-# OPTIONS_GHC -Wall -Werror #-}
-{-# LANGUAGE LambdaCase #-}
+{-# OPTIONS -fdefer-type-errors #-} 
+
 -- unfortunately not in GHC yet, try to add this line when at GHC 8.0: {-# ApplicativeDo #-}
 module Database.Design.Ampersand.ADL1.P2A_Converters (pCtx2aCtx,pCpt2aCpt)
 where
@@ -660,9 +661,20 @@ pCtx2aCtx _
       binary  cbn     tp  e1 e2 = wrap (fst e1,fst e2) <$> deriv tp (e1,e2)
         where
          wrap (expr1,expr2) ((src,b1), (tgt,b2)) = (cbn (addEpsilon src tgt expr1) (addEpsilon src tgt expr2), (b1, b2))
-      unary   cbn     tp e1      = wrap (fst e1) <$> deriv tp e1
+
+      unary :: (Expression -> Expression) -- combinator
+             -> ( TT ( SrcOrTgt
+                     , (Expression, (Bool, Bool)) -> (Expression, (Bool, Bool))
+                     )
+                , TT ( SrcOrTgt
+                     , (Expression, (Bool, Bool)) -> (Expression, (Bool, Bool))
+                     )
+                ) -- simple instruction on how to derive the type
+             -> (Expression,(Bool,Bool))
+             -> Guarded (Expression,(Bool,Bool))
+      unary   cbn     tp e1      = wrap <$> deriv tp e1 -- undefined -- wrap (fst e1)
         where
-         wrap expr  ((src,b1), (tgt,b2))  = (cbn (addEpsilon src tgt expr), (b1, b2))
+         wrap  ((src,b1), (tgt,b2))  = (cbn (addEpsilon src tgt (fst e1)), (b1, b2))
       binary' cbn preConcept tp side1 side2 e1 e2 = 
           do a <- deriv1 o (fmap (resolve (e1,e2)) preConcept) 
              b <- deriv' tp (e1,e2)
@@ -673,6 +685,11 @@ pCtx2aCtx _
          wrap (expr1,expr2) (cpt,True) ((_,b1), (_,b2))
           = pure (cbn (lrDecide side1 expr1) (lrDecide side2 expr2), (b1, b2))
             where lrDecide side e = case side of Src -> addEpsilonLeft' cpt e; Tgt -> addEpsilonRight' cpt e
+
+      deriv ::   (TT (SrcOrTgt, t -> (Expression, (Bool, Bool))),
+                  TT (SrcOrTgt, t -> (Expression, (Bool, Bool))))
+                 -> t -> Guarded ((Type, Bool), (Type, Bool))
+
       deriv (t1,t2) es = (,) <$> deriv1 o (fmap (resolve es) t1) <*> deriv1 o (fmap (resolve es) t2)
  
     deriv1 o x'

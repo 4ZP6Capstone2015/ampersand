@@ -341,6 +341,7 @@ chpDiagnosis fSpec
                             , showPercentage (length ruls) (length.filter hasRef $ ruls)
                             ]
 
+          hasRef :: Motivated a => a -> Bool
           hasRef x = maybe False (any  ((/=[]).explRefIds)) (purposeOf fSpec (fsLang fSpec) x)
 
           showPercentage x y = if x == 0 then "-" else show (y*100 `div` x)++"%"
