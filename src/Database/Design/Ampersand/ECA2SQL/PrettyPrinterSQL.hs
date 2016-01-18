@@ -15,19 +15,19 @@ instance Pretty (SQLSt k v) where
     pretty (Insert tableSpec expr2ins) = text "INSERT INTO" <+> (text ts) <+> text "VALUES " <+> lparen  <+> (text vals) <+> rparen 
         where ts = showTableSpec tableSpec
               vals = showSQLRow expr2ins
-   pretty x = case x of {
-        Update tb to arg -> text "UPDATE" <> (showTableSpec tb) <> text "SET" <> (prettySQLToClause to arg)
-		Delete tb from -> text "DELETE"  <> (prettySQLFromClause from) <> text "From" <> (showTableSpec tb)
-   } 
+    pretty x = case x of 
+        Update tb to arg -> text "UPDATE" <> (showTableSpec tb) <> text "SET" <> (prettySQLToClause to arg) 
+        Delete tb from -> text "DELETE" <> (prettySQLFromClause from) <> text "From" <> (showTableSpec tb)
+    
 
    -- pretty (Delete ..)
-showTableSpec :: TableSpec t -> String
-showTableSpec (MkTableSpec (Ref name)) = getName name
+showTableSpec :: TableSpec t -> Doc
+showTableSpec (MkTableSpec (Ref name)) = text (show(getName name))
 
 
-showSQLRow :: SQLVal a -> String
-showSQLRow (SQLScalarVal x) = (prettyValueExpr theDialect x)
-showSQLRow (SQLQueryVal x) = (prettyQueryExpr theDialect x)
+showSQLRow :: SQLVal a -> Doc
+showSQLRow (SQLScalarVal x) = text(show(prettyValueExpr theDialect x))
+showSQLRow (SQLQueryVal x) = text(show(prettyQueryExpr theDialect x))
 
 --[TODO : showSQLVal to String]
 --showSQLVal :: SQLVal -> String
@@ -45,4 +45,4 @@ prettySQLFromClause :: (SQLVal ('SQLRow ts) -> SQLVal 'SQLBool) -> Doc -- ts is 
 prettySQLFromClause = error "TODO"
 
 prettySQLAtoB :: (SQLVal a -> SQLVal b) -> Doc
-prettySQLAtoB = errror "TODO" -- look at SQLVal, find how to get it to doc
+prettySQLAtoB = error "TODO" -- look at SQLVal, find how to get it to doc
