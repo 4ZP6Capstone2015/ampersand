@@ -433,10 +433,11 @@ data ECArule= ECA { ecaTriggr :: Event       -- The event on which this rule is 
                   , ecaDelta ::  Declaration -- The delta to be inserted or deleted from this rule. It actually serves very much like a formal parameter.
                   , ecaAction :: PAclause    -- The action to be taken when triggered.
                   , ecaNum ::    Int         -- A unique number that identifies the ECArule within its scope.
-                  }
+                  } deriving (Show) 
 
-instance Show ECArule where
-  showsPrec _ r = showString ("ON "++show (ecaTriggr r)++" "++show (ecaDelta r)++" do something.")
+-- instance Show ECArule where
+  -- YT: Show instances show show using Haskell syntax
+  -- showsPrec _ r = showString ("ON "++show (ecaTriggr r)++" "++show (ecaDelta r)++" do something.")
 
 instance Eq (ECArule) where
    e==e' = ecaNum e==ecaNum e'
@@ -477,7 +478,14 @@ data PAclause
                     , paMotiv :: [(Expression,[Rule] )]
                     }
               | Ref { paVar :: String
-                    }
+                    } deriving Show 
+
+-- Get a derived instance for PAclause 
+instance Show q => Show (PSingleton -> q) where 
+  show f = show $ f $ makePSingleton "x" 
+
+instance Show q => Show (PAclause -> q) where 
+  show f = show $ f $ Ref "freshVar" 
 
 instance Eq PAclause where
    CHC ds _ == CHC ds' _ = ds==ds'

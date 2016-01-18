@@ -24,7 +24,7 @@ import Data.Char
 -- | This data constructor is able to hold all kind of information that is useful to
 --   express what the user would like Ampersand to do.
 data Options = Options { showVersion :: Bool
-                       , printName :: Bool 
+                       , printECAInfo :: Bool 
                        , plugECA2SQL :: Bool -- plugIn for ECA2SQL, currently doesn't overide the default (ExecEngine)
                        , preVersion :: String
                        , postVersion :: String  --built in to aid DOS scripting... 8-(( Bummer.
@@ -116,7 +116,7 @@ getOptions =
 
       let startOptions =
                Options {genTime          = localTime
-                      , printName        = False
+                      , printECAInfo     = False
                       , plugECA2SQL      = False
                       , dirOutput        = fromMaybe "."       (lookup envdirOutput    env)
                       , outputfile       = fatal 83 "No monadic options available."
@@ -408,9 +408,9 @@ options = [ (Option ['v']   ["version"]
                (NoArg (\opts -> return opts{oldNormalizer = False}))
                "use the new normalizer at your own risk." -- :-)
             , Hidden)
-          , (Option []        ["printName"]
-               (NoArg (\opts -> return opts{printName = True}))
-               "Print the name of the specification." 
+          , (Option []        ["print-eca-info"]
+               (NoArg (\opts -> return opts{printECAInfo = True}))
+               "Print information regarding ECA rules in the source." 
             , Public)
           , (Option []        ["eca-2-sql"]
                (NoArg (\opts -> return opts{plugECA2SQL = True}))

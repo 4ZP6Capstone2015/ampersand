@@ -13,10 +13,12 @@ import Database.Design.Ampersand.Prototype.Generate    (generateGenerics)
 import Database.Design.Ampersand.Output.ToJSON.ToJson  (generateJSONfiles)
 import Database.Design.Ampersand.Prototype.GenFrontend (doGenFrontend, clearTemplateDirs)
 import Database.Design.Ampersand.Prototype.ValidateSQL (validateRulesSQL)
+import Database.Design.Ampersand.ECA2SQL.PrettyPrinterSQL ()
+import Text.PrettyPrint.Leijen (Pretty(..))
 
 main :: IO ()
 main =
- do opts@Options{printName} <- getOptions
+ do opts@Options{printECAInfo} <- getOptions
     if showVersion opts || showHelp opts
     then mapM_ putStr (helpNVersionTexts ampersandVersionStr opts)
     else do gFSpec <- createFSpec opts
@@ -24,14 +26,16 @@ main =
               Errors err    -> do putStrLn "Error(s) found:"
                                   mapM_ putStrLn (intersperse  (replicate 30 '=') (map showErr err))
                                   exitWith $ ExitFailure 10
-              Checked fSpec -> do when printName $ printInfoFSPec fSpec 
+              Checked fSpec -> do when printECAInfo $ printECAInfoFSPec opts fSpec 
                                   generateAmpersandOutput  fSpec
                                   generateProtoStuff       fSpec
 
 
-printInfoFSPec :: FSpec -> IO ()  
-printInfoFSPec fSpec@FSpec{..} = do
-  putStrLn $ "Showing ECA rules "  ++ concatMap (\x -> show x ++ "\n") vEcas
+
+
+
+printECAInfoFSPec :: Options -> FSpec -> IO ()  
+printECAInfoFSPec opts fSpec@FSpec{..} = do
   putStrLn $ "The name of the specification is " ++ fsName 
   validatedRules <- validateRulesSQL fSpec 
   putStrLn $ "Output of specification :" ++ show validatedRules -- ++ rulename ++'\n' ++ "SQL Rules" ++ validatedSQLRules 
@@ -63,7 +67,10 @@ printInfoFSPec fSpec@FSpec{..} = do
     [(plug,att) |InternalPlug plug@BinSQL{}<-plugInfos, (c,att)<-cLkpTbl plug]++
     [(plug,sqlColumn plug) |InternalPlug plug@ScalarSQL{}<-plugInfos] 
 
-
+  putStrLn "ECA rules [ Haskell ]" >> mapM_ (putStrLn . showHS opts "") vEcas
+  putStrLn "ECA rules [ ADL ]" >> mapM_ (putStrLn . showADL) vEcas
+  putStrLn "ECA rules [ SQL ]" >> mapM_ (print . pretty) vEcas 
+  
   
 
 generateProtoStuff :: FSpec -> IO ()

@@ -1,10 +1,9 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# LANGUAGE ScopedTypeVariables #-} 
 
-module Database.Design.Ampersand.ECA2SQL.PrettyPrinterSQL
-where
+module Database.Design.Ampersand.ECA2SQL.PrettyPrinterSQL () where
 
-import Text.PrettyPrint.Leijen 
+import Text.PrettyPrint.Leijen hiding ((<$>)) 
 import Language.SQL.SimpleSQL.Syntax
 import Language.SQL.SimpleSQL.Pretty
 import Database.Design.Ampersand.ECA2SQL.TypedSQL
@@ -14,8 +13,9 @@ import Data.List (intercalate,intersperse)
 import Data.List.Utils (replace)
 import Data.Char (toUpper)
 
-instance Pretty (SQLSt k v) where
+instance Pretty ECArule where 
 
+instance Pretty (SQLSt k v) where
     pretty (Insert tableSpec_ expr2ins) = text "INSERT INTO" <+> showTableSpec tableSpec_ <+> text "VALUES " <+> lparen  <+> showSQLVal expr2ins <+> rparen 
     pretty (Delete tableSpec_ from) = foldl1 
       [ text "DELETE FROM" 
@@ -39,7 +39,6 @@ instance Pretty (SQLSt k v) where
         -- YT: this is wrong! Read the comments on NewRef 
         -- NewRef tb a b -> text "SET"<> (newRefOne tb) <> text "\n" <> (newRefOne tb) <> text ":" <> text "\n\t" <> text "=" <> (prettyNewRef b);
 
-     }
 
     {-Update tb to arg -> text "UPDATE" <> (showTableSpec tb) <> text "SET" <> (prettySQLToClause to arg);
       SetRef (Ref_ var) exp -> text "SET @" <> (prettyNametoDoc var) <> text "=" <> (showSQLVal exp);
