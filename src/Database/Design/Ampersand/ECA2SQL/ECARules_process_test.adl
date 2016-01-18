@@ -1,0 +1,97 @@
+CONTEXT ecaRules IN ENGLISH
+--Test file for ECA test
+
+RELATION projectName[Project*ProjectName] [UNI,TOT]
+MEANING "A project must have one name"
+RELATION projectStatus[Project*ProjectStatus] [UNI]
+MEANING "A project can have one status, such as 'in progress', or 'completed'"
+RELATION projectDescription[Project*Description] [UNI] 
+MEANING "A project can have a description, e.g. stating the result it aims to achieve"
+RELATION projectStartDate[Project*Date] [UNI] 
+MEANING "The start date of a project can be specified"
+RELATION projectStarted[Project*Project] [PROP]
+MEANING "Projects can have the property of having been started"
+RELATION pl[Project*Person]
+MEANING "A project can have any number of project leaders"
+RELATION member[Project*Person]
+MEANING "A person can be assigned to work within a project"
+
+RELATION personName[Person*PersonName] [UNI]
+MEANING "A person can have (at most) one name"
+RELATION personStatus[Person*PersonStatus] [UNI]
+MEANING "A person can have a status"
+RELATION personEmail[Person*Email] [UNI,TOT]
+MEANING "A person can have an email-address"
+RELATION workswith[Person*Person]
+MEANING "A person can work with another person (in some project)"
+
+RELATION project[Assignment*Project] [UNI,TOT]
+MEANING "Every Assignment must apply to one project"
+RELATION assignee[Assignment*Person] [UNI,TOT]
+MEANING "Every Assignment must apply to one person"
+RELATION pplStartDate[Assignment*Date] [UNI]
+MEANING "The date at which the Assignment started may be known"
+RELATION pplStarted[Assignment*Assignment] [PROP]
+MEANING "A Assignment may have the property that it has been started"
+
+-- RELATIONS ADDED FOR TESTS
+
+RELATION projectMember[Person*Project] [UNI]
+MEANING "Every Person can only be assigned to (at most) one project"
+
+-- END OF RELATIONS ADDED FOR TESTS
+
+-- Automated rules
+PURPOSE RULE "Projectleaders are not members of a team"
+{+When a member of some project becomes the project leader of that project, it cannot be a project member any more. This is a consequence of the choice that project leaders are not considered to be members of the projects they lead. Whenever this is the case, the membership is automatically removed.-}
+ROLE "ExecEngine" MAINTAINS "Projectleaders are not members of a team"
+RULE "Projectleaders are not members of a team": pl |- -member
+VIOLATION ( TXT "DelPair;member;Project;", SRC I, TXT ";Person;", TGT I)
+
+PURPOSE RULE "Works with (populate)"
+{+We say that a person works with another person if there is a project which they share. This means that either person can be a member or a project leader (since there may be multiple project leaders) of a specific project.
+Therefore, we need a rule that populates the relation 'workswith'. in appropriate cases-}
+ROLE "ExecEngine" MAINTAINS "Works with (populate)"
+RULE "Works with (populate)": ((pl\/member)~;(pl\/member))-I |- workswith
+VIOLATION ( TXT "InsPair;workswith;Person;", SRC I, TXT ";Person;", TGT I )
+
+PURPOSE RULE "Works with (depopulate)"
+{+We say that a person works with another person if there is a project which they share. This means that either person can be a member or a project leader (since there may be multiple project leaders) of a specific project.
+Therefore, we need a rule that depopulates the relation 'workswith' in appropriate cases.-}
+ROLE "ExecEngine" MAINTAINS "Works with (depopulate)"
+RULE "Works with (depopulate)": workswith |- ((pl\/member)~;(pl\/member))-I
+VIOLATION ( TXT "DelPair;workswith;Person;", SRC I, TXT ";Person;", TGT I)
+
+
+PURPOSE RULE "Create Assignment"
+{+In order to become a project leader, you need an assignment as project leader. Therefore, we need a rule that creates such structures, and populates them.-}
+ROLE "ExecEngine" MAINTAINS "Create Assignment"
+RULE "Create Assignment" : pl |- project~;assignee
+VIOLATION (TXT "NewStruct;Assignment"
+             , TXT ";project;Assignment;_NEW;Project;", SRC I
+             , TXT ";assignee;Assignment;_NEW;Person;", TGT I
+             , TXT ";pplStartDate;Assignment;_NEW;Date;{php}date(DATE_ISO8601)" -- Current date in ISO 8601 date format 
+          )
+PURPOSE RULE "Delete Assignment"
+{+Whenever a project participant is discharged from his task, the corresponding Assignment needs to be deleted. This is done by means of an automated rule.-}
+ROLE "ExecEngine" MAINTAINS "Delete Assignment"
+RULE "Delete Assignment" :  project~;assignee |- pl\/member
+VIOLATION ( TXT "DelAtom;Assignment;", SRC I)
+
+-- ADDED FOR TEST 
+
+PURPOSE RULE "Delete Person"
+{+Someone gets fired-}
+ROLE "ExecEngine" MAINTAINS "Delete Person"
+RULE "Delete Person" :  person~;assignee |- pl\/member
+VIOLATION ( TXT "DelAtom;Person;", SRC I)
+
+
+PURPOSE RULE "Member cannot be in more than one project"
+{+ Worker cannot be a member of multiple project teams-}
+ROLE "ExecEngine" MAINTAINS "Person cannot be members of multiple teams"
+RULE "Person are not members of more than 1 team": pl |- ((pl\/member)~;(pl\/member))-
+VIOLATION ( TXT "DelPair;member;Project;", SRC I, TXT ";Person;", TGT I)
+-- END OF ADDED FOR TEST 
+
+
