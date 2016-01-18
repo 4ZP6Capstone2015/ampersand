@@ -174,7 +174,8 @@ library
                      Database.Design.Ampersand.ECA2SQL.TypedSQL,
                      Database.Design.Ampersand.ECA2SQL.TSQLCombinators,
                      Database.Design.Ampersand.ECA2SQL.Utils,
-                     Database.Design.Ampersand.ECA2SQL.Singletons
+                     Database.Design.Ampersand.ECA2SQL.Singletons,
+                     Database.Design.Ampersand.ECA2SQL.PrettyPrinterSQL
 
                 
 executable ampersand
@@ -319,7 +320,8 @@ executable ampersand
                      Database.Design.Ampersand.Output.ToJSON.Conjuncts,
                      Database.Design.Ampersand.Output.ToJSON.Interfaces,
                      Database.Design.Ampersand.Output.ToJSON.Others,
-                     Database.Design.Ampersand.ECA2SQL 
+                     Database.Design.Ampersand.ECA2SQL,
+                     Database.Design.Ampersand.ECA2SQL.PrettyPrinterSQL                    
 
 
 Test-Suite ampersand-test
