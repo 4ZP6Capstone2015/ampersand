@@ -17,7 +17,10 @@ import Data.Char (toUpper)
 instance Pretty (SQLSt k v) where
 
     pretty (Insert tableSpec expr2ins) = text "INSERT INTO" <+> (text $ showTableSpec tableSpec) <+> text "VALUES " <+> lparen  <+> (text $ showSQLRow expr2ins) <+> rparen 
-   -- pretty (Delete tableSpec from) = text "DELETE FROM" <> (text $ showTableSpec tableSpec)  <> text " WHERE " <> (text $ prettySQLFromClause from)
+    pretty (Delete tableSpec from) = text "DELETE FROM" <> (text $ showTableSpec tableSpec)  <> text " WHERE " <> (text $ prettySQLFromClause from)
+    {-Update tb to arg -> text "UPDATE" <> (showTableSpec tb) <> text "SET" <> (prettySQLToClause to arg);
+      SetRef (Ref_ var) exp -> text "SET @" <> (prettyNametoDoc var) <> text "=" <> (showSQLRow exp);
+        -}
     
 --Update tableSpec to arg -> text "UPDATE" <> (showTableSpec tableSpec) <> text " SET " <> (prettySQLToClause to arg)
 
@@ -30,11 +33,10 @@ showTableSpec :: TableSpec t -> String
 showTableSpec (MkTableSpec (Ref name)) = getName name
 
 
-{-
 --case for delete predicate
 prettySQLFromClause :: forall ts . Sing ts => (SQLVal ('SQLRow ts) -> SQLVal 'SQLBool) -> String -- ts is list of named types
 prettySQLFromClause f = showSQLRow $ f (SQLQueryVal (Table [UQName "Unique"]) :: SQLVal ('SQLRow ts)) 
--}
+
 
 --[TODO PART BELOW]
 
@@ -53,12 +55,3 @@ getName x = prettyValueExpr theDialect $ Iden [x]
 
 theDialect :: Dialect 
 theDialect = MySQL
-
-{-- useful 
-
-Update tb to arg -> text "UPDATE" <> (showTableSpec tb) <> text "SET" <> (prettySQLToClause to arg);
-        Delete tb from -> text "DELETE" <> (prettySQLFromClause from) <> text "From" <> (showTableSpec tb);
-		SetRef (Ref_ var) exp -> text "SET @" <> (prettyNametoDoc var) <> text "=" <> (showSQLRow exp);
-  
-  
-  --}
