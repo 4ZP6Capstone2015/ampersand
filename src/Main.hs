@@ -31,7 +31,7 @@ main =
 
 printInfoFSPec :: FSpec -> IO ()  
 printInfoFSPec fSpec@FSpec{..} = do
-  putStrLn $ "Showing ECA rules "  ++ map (\x -> show x ++ "\n") vEcas
+  putStrLn $ "Showing ECA rules "  ++ concatMap (\x -> show x ++ "\n") vEcas
   putStrLn $ "The name of the specification is " ++ fsName 
   validatedRules <- validateRulesSQL fSpec 
   putStrLn $ "Output of specification :" ++ show validatedRules -- ++ rulename ++'\n' ++ "SQL Rules" ++ validatedSQLRules 
