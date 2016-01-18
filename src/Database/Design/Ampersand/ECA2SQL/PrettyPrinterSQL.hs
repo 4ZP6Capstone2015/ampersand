@@ -1,4 +1,6 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
+{-# LANGUAGE ScopedTypeVariables #-} 
+
 module Database.Design.Ampersand.ECA2SQL.PrettyPrinterSQL
 where
 
@@ -6,12 +8,13 @@ import Text.PrettyPrint.Leijen
 import Language.SQL.SimpleSQL.Syntax
 import Language.SQL.SimpleSQL.Pretty
 import Database.Design.Ampersand.ECA2SQL.TypedSQL
+import Database.Design.Ampersand.ECA2SQL.Singletons
 import Data.List (intercalate,intersperse)
 import Data.List.Utils (replace)
 import Data.Char (toUpper)
 
---TableSpec ts -> SQLVal ('SQLRel ('SQLRow ts))
 instance Pretty (SQLSt k v) where
+
     pretty (Insert tableSpec expr2ins) = text "INSERT INTO" <+> ts <+> text "VALUES " <+> lparen  <+> vals <+> rparen 
         where ts = showTableSpec tableSpec
               vals = showSQLRow expr2ins
@@ -39,12 +42,19 @@ newRefOne = error "TODO"
 newRefTwo :: Maybe String -> Doc
 newRefTwo = error "TODO"
 
-showSQLRow :: SQLVal a -> Doc
-showSQLRow (SQLScalarVal x) = text(show(prettyValueExpr theDialect x))
-showSQLRow (SQLQueryVal x) = text(show(prettyQueryExpr theDialect x))
+showSQLRow :: SQLVal a -> String
+showSQLRow (SQLScalarVal x) = prettyValueExpr theDialect x
+showSQLRow (SQLQueryVal x) = prettyQueryExpr theDialect x
 
---[TODO : showSQLVal to String]
---showSQLVal :: SQLVal -> String
+-- pretty (Delete ..)
+showTableSpec :: TableSpec t -> String
+showTableSpec (MkTableSpec (Ref name)) = getName name
+
+
+--case for delete predicate
+prettySQLFromClause :: forall ts . Sing ts => (SQLVal ('SQLRow ts) -> SQLVal 'SQLBool) -> String -- ts is list of named types
+prettySQLFromClause f = showSQLRow $ f (SQLQueryVal (Table [UQName "Unique"]) :: SQLVal ('SQLRow ts)) 
+
 
 prettyNewRef :: Maybe (SQLVal a1) -> Doc
 prettyNewRef = error "TODO"
@@ -53,14 +63,22 @@ getName x = prettyValueExpr theDialect $ Iden [x]
 theDialect :: Dialect 
 theDialect = MySQL
 
+
+--[TODO PART BELOW]
+
 prettyNametoDoc :: Name -> Doc
 prettyNametoDoc = error "TODO"
+
 prettySQLToClause:: (SQLVal ('SQLRow ts) -> SQLVal 'SQLBool) -> (SQLVal ('SQLRow ts) -> SQLVal ('SQLRow ts)) -> Doc
 prettySQLToClause = error "TODO"
 
 
-prettySQLFromClause :: (SQLVal ('SQLRow ts) -> SQLVal 'SQLBool) -> Doc -- ts is list of named types
-prettySQLFromClause = error "TODO"
-
 prettySQLAtoB :: (SQLVal a -> SQLVal b) -> Doc
+
 prettySQLAtoB = error "TODO" -- look at SQLVal, find how to get it to doc
+--- [TODO ENDS]
+
+getName x = prettyValueExpr theDialect $ Iden [x]
+
+theDialect :: Dialect 
+theDialect = MySQL
