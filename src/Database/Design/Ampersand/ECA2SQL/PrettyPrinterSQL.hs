@@ -24,6 +24,23 @@ instance Pretty (SQLSt k v) where
       , withSingT (typeOfTableSpec tableSpec_) $ \_ -> prettySQLFromClause from
       ]
 
+    pretty x = case x of 
+    {
+        Update tb to arg -> withSingT (typeOfTableSpec tb) $ \_ -> 
+                            text "UPDATE" <> (showTableSpec tb) <> text "SET" <> (prettySQLToClause to arg);
+        Delete tb from -> withSingT (typeOfTableSpec tb) $ \_ -> 
+                            text "DELETE" <> (prettySQLFromClause from) <> text "From" <> (showTableSpec tb);
+        SetRef (Ref_ var) exp' -> text "SET @" <> (prettyNametoDoc var) <> text "=" <> (showSQLVal exp');
+        DropTable tb -> text "DROP TABLE" <> (showTableSpec tb);
+
+        -- YT: this is wrong! Read the comments on NewRef 
+        -- NewRef tb a b -> text "SET"<> (newRefOne tb) <> text "\n" <> (newRefOne tb) <> text ":" <> text "\n\t" <> text "=" <> (prettyNewRef b);
+		-- MakeTable tbl
+		-- Insert _ _ 
+		-- IfSQL _ _ _
+		-- _:>>= _
+    }
+
     {-Update tb to arg -> text "UPDATE" <> (showTableSpec tb) <> text "SET" <> (prettySQLToClause to arg);
       SetRef (Ref_ var) exp -> text "SET @" <> (prettyNametoDoc var) <> text "=" <> (showSQLVal exp);
         -}
