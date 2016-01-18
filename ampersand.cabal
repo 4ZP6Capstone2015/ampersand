@@ -175,7 +175,8 @@ library
                      Database.Design.Ampersand.ECA2SQL.TSQLCombinators,
                      Database.Design.Ampersand.ECA2SQL.Utils,
                      Database.Design.Ampersand.ECA2SQL.Singletons,
-                     Database.Design.Ampersand.ECA2SQL.PrettyPrinterSQL
+                     Database.Design.Ampersand.ECA2SQL.PrettyPrinterSQL, 
+                     Database.Design.Ampersand.ECA2SQL.Trace 
 
                 
 executable ampersand

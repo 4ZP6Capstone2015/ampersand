@@ -45,6 +45,8 @@ prettySQLFromClause = prettySQLAtoB
   -- showSQLVal $ f (SQLQueryVal (Table [UQName "Unique"]) :: SQLVal ('SQLRow ts)) 
  
 
+-- testing () = failure 
+
 --[TODO PART BELOW]
 
 prettyNametoDoc :: Name -> Doc

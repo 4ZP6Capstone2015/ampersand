@@ -1,5 +1,5 @@
 {-# LANGUAGE PatternSynonyms, NoMonomorphismRestriction, OverloadedStrings, LambdaCase, EmptyCase #-} 
-{-# LANGUAGE TemplateHaskell, QuasiQuotes, ScopedTypeVariables, PolyKinds, UndecidableInstances, DataKinds, DefaultSignatures #-}
+{-# LANGUAGE ViewPatterns, ScopedTypeVariables, PolyKinds, UndecidableInstances, DataKinds, DefaultSignatures #-}
 {-# LANGUAGE PartialTypeSignatures, TypeOperators #-} 
 {-# OPTIONS -fno-warn-unticked-promoted-constructors #-} 
 
@@ -26,6 +26,7 @@ import qualified GHC.Exts as Exts
 import Language.SQL.SimpleSQL.Syntax (Name(..))
 import Database.Design.Ampersand.ECA2SQL.Equality 
 import Database.Design.Ampersand.ECA2SQL.Singletons
+import Database.Design.Ampersand.ECA2SQL.Trace 
 import Control.DeepSeq
 
 instance IsString Name where fromString = Name 
@@ -101,7 +102,7 @@ type family (&&) (x :: Bool) (y :: Bool) :: Bool where
 SFalse |&& _ = SFalse 
 _ |&& SFalse = SFalse 
 STrue |&& STrue = STrue 
-_ |&& _ = error "impossible"
+x |&& y = impossible assert "Bool not {T,F}" (x `seq` y `seq` () )
 
 -- Symbol 
 symbolKindProxy = Proxy :: Proxy ('KProxy :: KProxy Symbol)
@@ -178,9 +179,10 @@ decNotElem (SingT WNil) _ = Yes NotElem_Nil
 decNotElem (SingT (WCons (x :: SingWitness 'KProxy x0 t0) (xs :: SingWitness 'KProxy xs0 ts0))) e = 
   case (decNotElem (SingT xs) e, SingT x %== e) of 
     (Yes p, No q) -> Yes (NotElem_Cons q p) 
-    (No p, _) -> No (mapNeg (\case { NotElem_Cons _ q -> q ; _ -> error "decNotElem:impossible" }) p) 
+    (No p, _) -> No (mapNeg (\case { NotElem_Cons _ q -> q ; a -> impossible assert "NotElem of (:) is not NotElem_Cons" a }) p) 
     (_, Yes Refl) -> case triviallyFalse :: Not (() :~: Int) of 
-                       q -> No (mapNeg (\case { NotElem_Cons p _ -> case elimNeg p Refl of{} ; _ -> error "decNotElem:impossible" }) q)  
+                       q -> No (mapNeg (\case { NotElem_Cons p _ -> case elimNeg p Refl of{}
+                                              ; a -> impossible assert "NotElem of (:) is not NotElem_Cons" a }) q)  
 
 decSetRec :: forall xs . (SingKind ('KProxy :: KProxy a)) => SingT (xs :: [RecLabel a b]) -> Dec (SetRec xs)
 decSetRec = go (SingT WNil) where 
@@ -189,8 +191,10 @@ decSetRec = go (SingT WNil) where
   go seen@(SingT seen') (SingT (WCons (WRecLabel wnm _wty) xs)) = 
     case (decNotElem seen (SingT wnm), go (SingT (WCons wnm seen')) (SingT xs)) of 
       (Yes p, Yes q) -> Yes (SetRec_Cons p q) 
-      (No p, _) -> No (mapNeg (\case { SetRec_Cons x0 _ -> x0; _ -> error "decSetRec:impossible" }) p) 
-      (_, No p) -> No (mapNeg (\case { SetRec_Cons _ x0 -> x0; _ -> error "decSetRec:impossible" }) p) 
+      (No p, _) -> No (mapNeg (\case { SetRec_Cons x0 _ -> x0
+                                     ; a -> impossible assert "SetRec of a (:) is not SetRec_Cons" (a `seq` ()) }) p) 
+      (_, No p) -> No (mapNeg (\case { SetRec_Cons _ x0 -> x0
+                                     ; a -> impossible assert "SetRec of a (:) is not SetRec_Cons" (a `seq` ()) }) p) 
 
 type family IsJust (x :: Maybe k) :: k where 
   IsJust ('Just x) = x 
@@ -224,7 +228,7 @@ lookupRec :: forall (xs :: [RecLabel Symbol b]) (nm :: Symbol) (r :: b) . (Looku
 lookupRec row nm = 
   elimSingT (lookupRecM row nm) $ \case 
     WJust r -> SingT r 
-    WNothing -> error "lookupRec: impossible"
+    WNothing -> impossible assert "LookupRec exists but is not Just" () 
 
 
 -- records to/from lists 
@@ -278,3 +282,5 @@ instance (f o ~ r) => Uncurry f '[] o r where
 
 instance (Uncurry f args o r, q ~ (f arg -> r)) => Uncurry f (arg ': args) o q where 
   uncurryN f arg = uncurryN (f . PCons arg) 
+
+

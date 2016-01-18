@@ -12,7 +12,9 @@ import Data.Proxy (Proxy(..), KProxy(..))
 import GHC.TypeLits (Symbol, symbolVal, sameSymbol, KnownSymbol)
 import qualified GHC.TypeLits as TL  
 import Database.Design.Ampersand.ECA2SQL.Equality 
+import Database.Design.Ampersand.ECA2SQL.Trace 
 import Numeric.Natural
+import Control.DeepSeq
 
 -- test
 
@@ -73,12 +75,12 @@ data family TyRepSing (x :: k)
 
 data instance TyRepSing (x :: [TyRep]) where 
   STyNil :: TyRepSing ('[] :: [TyRep])
-  STyCons :: TyRepSing (x :: TyRep) -> TyRepSing xs -> TyRepSing (x ': xs) 
+  STyCons :: !(TyRepSing (x :: TyRep)) -> !(TyRepSing xs) -> TyRepSing (x ': xs) 
 
 data instance TyRepSing (x :: TyRep) where 
   STyCtr :: (TL.KnownSymbol nm) => !(Proxy nm) -> !(TyRepSing args) -> TyRepSing ('TyCtr nm args) 
-  STySym :: (TL.KnownSymbol nm) => Proxy nm -> TyRepSing ('TyPrimSym nm) 
-  STyNat :: (TL.KnownNat n) => Proxy n -> TyRepSing ('TyPrimNat n) 
+  STySym :: (TL.KnownSymbol nm) => !(Proxy nm) -> TyRepSing ('TyPrimSym nm) 
+  STyNat :: (TL.KnownNat n) => !(Proxy n) -> TyRepSing ('TyPrimNat n) 
   
 class TyRepSingI (x :: k) where 
   tyRepSing :: TyRepSing x 
@@ -94,7 +96,7 @@ eqSymbol :: (TL.KnownSymbol x, TL.KnownSymbol y) => Proxy x -> Proxy y -> DecEq 
 eqSymbol x y = 
   case TL.sameSymbol x y of 
     Just a  -> Yes a
-    Nothing -> No ( notfalsum (error "eqSymbol: impossible") )
+    Nothing -> No ( notfalsum (impossible assert "eqSymbol" ()) )
 
 eqProdTypRep :: TyRepSing (xs :: [TyRep]) -> TyRepSing ys -> DecEq xs ys 
 eqProdTypRep STyNil STyNil = Yes Refl
@@ -112,7 +114,7 @@ eqTyRep :: TyRepSing (x :: TyRep) -> TyRepSing y -> DecEq x y
 eqTyRep (STyNat n0) (STyNat n1) =
   case TL.sameNat n0 n1 of 
     Just Refl -> Yes Refl
-    Nothing   -> No ( notfalsum (error "eqTyRep: impossible") )
+    Nothing   -> No ( notfalsum (impossible assert "equal nats are not equal" ()) )
 
 eqTyRep (STySym n0) (STySym n1) = mapDec (\case {Refl -> Refl}) (mapNeg (\case {Refl -> Refl})) $ eqSymbol n0 n1 
 
@@ -172,8 +174,7 @@ instance SingKind ('KProxy :: KProxy Bool) where
   witness WFalse = (Refl, Dict) 
 {-
   singKindWitness1 Refl WTrue WTrue = Refl 
-  singKindWitness1 Refl WFalse WFalse = Refl
-  singKindWitness1 x y z = x `seq` y `seq` z `seq` error "impossible" 
+  singKindWitness1 Refl WFalse WFalse = Refl 
 
   singKindWitness2 a WTrue WFalse = case a of {}
   singKindWitness2 a WFalse WTrue = case a of {}
@@ -207,12 +208,10 @@ instance SingKind ('KProxy :: KProxy Ordering) where
   singKindWitness1 Refl WLT WLT = Refl 
   singKindWitness1 Refl WEQ WEQ = Refl 
   singKindWitness1 Refl WGT WGT = Refl 
-  singKindWitness1 Refl x y = x `seq` y `seq` error "impossible"
 
   singKindWitness2 _ WLT WLT = Refl 
   singKindWitness2 _ WEQ WEQ = Refl 
-  singKindWitness2 _ WGT WGT = Refl 
-  singKindWitness2 Refl x y = x `seq` y `seq` error "impossible"-}
+  singKindWitness2 _ WGT WGT = Refl -}
 
   type ValOfSing ('KProxy :: KProxy Ordering) = Ordering   
   sing2val' = \case { WLT -> LT; WEQ -> EQ; WGT -> GT }  
@@ -404,7 +403,7 @@ instance SingKind ('KProxy :: KProxy TL.Nat) where
   sing2val' (WNat x) = fromIntegral $ TL.natVal x 
   val2sing' _ n k = case TL.someNatVal (fromIntegral n) of 
                      Just (TL.SomeNat x) -> k (WNat x)
-                     _ -> error "impossible"
+                     Nothing -> impossible assert "negative natural number" () 
 
 pattern SNat x = SingT (WNat x) 
 
