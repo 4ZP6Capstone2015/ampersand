@@ -1,5 +1,5 @@
 {-# LANGUAGE PatternSynonyms, NoMonomorphismRestriction, OverloadedStrings, LambdaCase, EmptyCase #-} 
-{-# LANGUAGE TemplateHaskell, QuasiQuotes, ScopedTypeVariables, PolyKinds, UndecidableInstances, DataKinds, DefaultSignatures #-}
+{-# LANGUAGE ViewPatterns , ScopedTypeVariables, PolyKinds, UndecidableInstances, DataKinds, DefaultSignatures #-}
 {-# LANGUAGE PartialTypeSignatures #-} 
 {-# OPTIONS -fno-warn-unticked-promoted-constructors #-} 
 
@@ -29,6 +29,7 @@ import GHC.TypeLits (Symbol)
 import GHC.Exts (Constraint)
 import Data.Type.Equality ((:~:)(..))
 import Unsafe.Coerce 
+import Data.Function (fix) 
 import Database.Design.Ampersand.ECA2SQL.Utils 
 import Database.Design.Ampersand.ECA2SQL.Singletons
 
@@ -166,21 +167,37 @@ deref (Ref_ nm) = unsafeSqlValFromName nm
 -- The specification of a table is a reference to a relation on rows 
 -- of the table type. 
 data TableSpec t where 
-  MkTableSpec :: { getTableSpec :: SQLValRef ('SQLRel ('SQLRow t)) } -> TableSpec t
-  TableAlias_  :: SingT newNames -> TableSpec t0 -> TableSpec (ZipRec newNames (RecAssocs t0)) 
+  MkTableSpec :: { getTableSpec :: !(SQLValRef ('SQLRel ('SQLRow t))) } -> TableSpec t
+  TableAlias_  :: !(SingT newNames) -> !(TableSpec t0) -> TableSpec (ZipRec newNames (RecAssocs t0)) 
 
-typeOfTableSpec :: TableSpec t -> SingT t 
-typeOfTableSpec (MkTableSpec x) = 
+-- Get the type of a table spec. This returns a `SQLRow t' instead of just a `t'
+-- simply because the proof of (UniqueLabels && NonEmpty) is packaged in with `SQLRow t'
+-- but not `t'
+typeOfTableSpec :: forall t . TableSpec t -> SingT ('SQLRow t) 
+typeOfTableSpec t = t `seq` 
+  let q :: forall q . TableSpec q -> Dict (NonEmpty q &*& IsSetRec q)
+      q t' = 
+        case t' of 
+          (MkTableSpec (typeOfSem -> SingT (WSQLRel (WSQLRow zs)))) -> Dict 
+          (TableAlias_ _ y) -> q t' 
+
+  in case typeOfTableSpec' t of 
+       SingT x -> case unsafeCoerce (q t) :: Dict (NonEmpty t &*& IsSetRec t) of 
+                    Dict -> SingT (WSQLRow x)
+
+typeOfTableSpec' :: TableSpec t -> SingT t
+typeOfTableSpec' (MkTableSpec x) = 
   case typeOfSem x of 
     SingT (WSQLRel (WSQLRow t)) -> SingT t
-    q -> q `seq` error "typeOfTableSpec:impossible"
-typeOfTableSpec (TableAlias_ nms t') = tr nms $ recAssocs $ typeOfTableSpec t' where 
+    q -> q `seq` error "typeOfTableSpec':impossible"
+
+typeOfTableSpec' (TableAlias_ nms t') = tr nms $ recAssocs $ typeOfTableSpec' t' where 
   tr :: SingT newNames -> SingT xs -> SingT (ZipRec newNames xs) 
   tr (SingT WNil) (SingT WNil) = SingT WNil 
   tr (SingT (WCons x xs)) (SingT (WCons y ys)) = 
     case tr (SingT xs) (SingT ys) of { SingT rs -> SingT (WCons (WRecLabel x y) rs) }
-  tr (SingT WCons{}) (SingT WNil) = error "typeOfTableSpec:impossible"
-  tr (SingT WNil{}) (SingT WCons{}) = error "typeOfTableSpec:impossible"
+  tr (SingT WCons{}) (SingT WNil) = error "typeOfTableSpec':impossible"
+  tr (SingT WNil{}) (SingT WCons{}) = error "typeOfTableSpec':impossible"
 
 -- Safely create a table spec. 
 tableSpec :: (IsSetRec x, NonEmpty x) => Name -> SingT x -> TableSpec x 

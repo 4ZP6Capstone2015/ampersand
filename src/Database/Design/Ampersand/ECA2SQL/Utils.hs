@@ -235,7 +235,7 @@ type family ZipRec (xs :: [a]) (ys :: [b]) :: [RecLabel a b] where
 unzipRec :: SingT xs -> ( SingT (RecLabels xs) , SingT (RecAssocs xs) )
 unzipRec (SingT WNil) = (SingT WNil, SingT WNil) 
 unzipRec (SingT (WCons (WRecLabel a b) xs)) = 
-  case unzipRec xs of { (SingT as, SingT bs) -> (SingT (WCons a as), SingT (WCons b bs)) } 
+  case unzipRec (SingT xs) of { (SingT as, SingT bs) -> (SingT (WCons a as), SingT (WCons b bs)) } 
 
 recAssocs :: SingT xs -> SingT (RecAssocs xs) 
 recAssocs = snd . unzipRec
@@ -263,6 +263,10 @@ if_ap (IfA f) (IfA a) = IfA $
   elimSingT (sing :: SingT cond) $ \case 
     WTrue -> f a 
     WFalse -> f a 
+
+-- Conjunction of constraints. 
+class (x,y) => (&*&) (x :: Constraint) (y :: Constraint) 
+instance (x,y) => x &*& y 
 
 -- uncurry
 
