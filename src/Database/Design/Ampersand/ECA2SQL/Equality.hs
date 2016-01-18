@@ -68,8 +68,10 @@ neq_is_neq x = x `seq` unsafeCoerce Refl -- TRUST ME
 
 newtype Not a = Not_ (a -> Void) 
 
+-- Given a proof of false, we can derive any proof.  Semantically this is the
+-- same as `absurd' but operationally it is not. 
 notfalsum :: NFData a => Void -> Not a 
-notfalsum v = v `seq` Not_ (\x -> rnf x `seq` v)
+notfalsum v = Not_ (\x -> rnf x `seq` v)   
 
 mapNeg :: NFData b => (b -> a) -> Not a -> Not b 
 mapNeg f (Not_ q) = Not_ (\x -> q (f $!! x)) 
@@ -102,3 +104,4 @@ liftDec2 _ (No p) _ _ no = No (no p)
 
 dec2bool :: DecEq a b -> Bool
 dec2bool = \case { Yes{} -> True; No{} -> False } 
+ 
