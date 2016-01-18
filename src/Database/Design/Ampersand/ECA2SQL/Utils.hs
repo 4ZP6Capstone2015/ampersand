@@ -226,7 +226,24 @@ lookupRec row nm =
     WJust r -> SingT r 
     WNothing -> error "lookupRec: impossible"
 
+
+-- records to/from lists 
+type family ZipRec (xs :: [a]) (ys :: [b]) :: [RecLabel a b] where 
+  ZipRec '[] '[] = '[] 
+  ZipRec (x ': xs) (y ': ys) = (x ::: y) ': ZipRec xs ys 
  
+unzipRec :: SingT xs -> ( SingT (RecLabels xs) , SingT (RecAssocs xs) )
+unzipRec (SingT WNil) = (SingT WNil, SingT WNil) 
+unzipRec (SingT (WCons (WRecLabel a b) xs)) = 
+  case unzipRec xs of { (SingT as, SingT bs) -> (SingT (WCons a as), SingT (WCons b bs)) } 
+
+recAssocs :: SingT xs -> SingT (RecAssocs xs) 
+recAssocs = snd . unzipRec
+
+recLabels :: SingT xs -> SingT (RecLabels xs)  
+recLabels = fst . unzipRec 
+
+
 -- Type level if. Note that this is STRICT 
 type family If (a :: Bool) (x :: k)(y :: k) :: k where 
   If 'True x y = x 

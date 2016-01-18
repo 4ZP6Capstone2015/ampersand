@@ -167,7 +167,20 @@ deref (Ref_ nm) = unsafeSqlValFromName nm
 -- of the table type. 
 data TableSpec t where 
   MkTableSpec :: { getTableSpec :: SQLValRef ('SQLRel ('SQLRow t)) } -> TableSpec t
-  TableAlias  :: (RecAssocs t0 ~ RecAssocs t1) => TableSpec t0 -> TableSpec t1 
+  TableAlias_  :: SingT newNames -> TableSpec t0 -> TableSpec (ZipRec newNames (RecAssocs t0)) 
+
+typeOfTableSpec :: TableSpec t -> SingT t 
+typeOfTableSpec (MkTableSpec x) = 
+  case typeOfSem x of 
+    SingT (WSQLRel (WSQLRow t)) -> SingT t
+    q -> q `seq` error "typeOfTableSpec:impossible"
+typeOfTableSpec (TableAlias_ nms t') = tr nms $ recAssocs $ typeOfTableSpec t' where 
+  tr :: SingT newNames -> SingT xs -> SingT (ZipRec newNames xs) 
+  tr (SingT WNil) (SingT WNil) = SingT WNil 
+  tr (SingT (WCons x xs)) (SingT (WCons y ys)) = 
+    case tr (SingT xs) (SingT ys) of { SingT rs -> SingT (WCons (WRecLabel x y) rs) }
+  tr (SingT WCons{}) (SingT WNil) = error "typeOfTableSpec:impossible"
+  tr (SingT WNil{}) (SingT WCons{}) = error "typeOfTableSpec:impossible"
 
 -- Safely create a table spec. 
 tableSpec :: (IsSetRec x, NonEmpty x) => Name -> SingT x -> TableSpec x 

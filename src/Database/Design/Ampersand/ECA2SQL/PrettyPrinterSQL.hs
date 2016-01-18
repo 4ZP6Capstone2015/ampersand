@@ -15,8 +15,8 @@ import Data.Char (toUpper)
 
 instance Pretty (SQLSt k v) where
 
-    pretty (Insert tableSpec expr2ins) = text "INSERT INTO" <+> (text $ showTableSpec tableSpec) <+> text "VALUES " <+> lparen  <+> (text $ showSQLRow expr2ins) <+> rparen 
-    pretty (Delete tableSpec from) = text "DELETE FROM" <> (text $ showTableSpec tableSpec)  <> text " WHERE " <> (text $ prettySQLFromClause from)
+    pretty (Insert tableSpec_ expr2ins) = text "INSERT INTO" <+> (text $ showTableSpec tableSpec_) <+> text "VALUES " <+> lparen  <+> (text $ showSQLRow expr2ins) <+> rparen 
+    pretty (Delete tableSpec_ from) = text "DELETE FROM" <> (text $ showTableSpec tableSpec_)  <> text " WHERE " <> (text $ prettySQLFromClause from)
     {-Update tb to arg -> text "UPDATE" <> (showTableSpec tb) <> text "SET" <> (prettySQLToClause to arg);
       SetRef (Ref_ var) exp -> text "SET @" <> (prettyNametoDoc var) <> text "=" <> (showSQLRow exp);
         -}
@@ -35,7 +35,7 @@ showTableSpec (MkTableSpec (Ref name)) = getName name
 --case for delete predicate
 prettySQLFromClause :: forall ts . Sing ts => (SQLVal ('SQLRow ts) -> SQLVal 'SQLBool) -> String -- ts is list of named types
 prettySQLFromClause f = showSQLRow $ f (SQLQueryVal (Table [UQName "Unique"]) :: SQLVal ('SQLRow ts)) 
-
+ 
 
 --[TODO PART BELOW]
 
