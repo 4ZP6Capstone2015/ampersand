@@ -178,33 +178,22 @@ tableSpec tn xs@(SingT x) =
 
 -- Create an table spec from runtime information. Returns Nothing if the table
 -- would not be valid. 
-someTableSpec :: Name -> [(String, Exists SQLTypeS)] -> Exists TableSpec 
-someTableSpec tn cols = undefined 
-  
-  -- ind :: Proxy x1 -> Proxy xs2 -> Proxy x -> x :~: x1 -> Dict (IsSetRec (x1 ': xs2)) -> Dict (IsSetRec (x ': x1 ': xs2))
-  -- ind _ _ _ Refl Dict = Dict 
+someTableSpec :: Name -> [(String, Exists SQLTypeS)] -> Maybe (Exists TableSpec) 
+someTableSpec tn cols = 
+  mkSingNames cols #>> \colSing@(SingT cols') -> 
+  case decSetRec colSing of 
+    Yes q -> 
+      case cols' of 
+        WNil{} -> Nothing
+        WCons{} -> openSetRec q $ Just $ Ex $ tableSpec tn colSing 
+    No{}  -> Nothing 
 
-  -- go :: forall xs . (SingKind ('KProxy :: KProxy (RecLabel a b))) => SingT (xs :: [RecLabel a b]) -> Maybe (Dict (IsSetRec xs)) 
-  -- go (SingT x) = 
-  --   case x of 
-  --     WCons x (WCons y r) -> 
-  --       case SingT x %== SingT y of 
-  --         Yes q -> 
-  --           case go (SingT ( WCons y r )) of 
-  --             Just p -> Just (_ q p)   
-
-  --       -- case (x %== y, go (WCons y r)) of 
-  --       --   (Yes Refl, Just Dict) -> _ 
-
-  --     WCons x WNil -> Just Dict 
-  --     WNil -> Just Dict 
-
-  -- | validTable =  
-
-{- someProd (map (\(nm,Ex (SingT t)) -> val2sing symbolKindProxy nm $ \(SingT nms) -> Ex (nms `SRecLabel` t)) cols)
-   #>> \case { PNil -> error "someTableSpec: empty list"; q@PCons{} -> Ex . tableSpec tn $ q } -}
-  -- someProd (map (\(nm,Ex t) -> val2sing symbolKindProxy nm #>> \nms -> Ex (nms `SRecLabel` t)) cols) 
-  --    #>> \case { PNil -> error "someTableSpec: empty list"; q@PCons{} -> Ex . tableSpec tn $ q }
+  where 
+    mkSingNames :: [(String, Exists SQLTypeS)] -> Exists (SingT :: [RecLabel Symbol SQLType] -> *) 
+    mkSingNames [] = Ex $ SingT WNil 
+    mkSingNames ((nm, Ex (SingT ty)):r) = 
+      case TL.someSymbolVal nm of 
+        TL.SomeSymbol nmTy -> mkSingNames r #>> \(SingT q) -> Ex $ SingT (WCons (WRecLabel (WSymbol nmTy) ty) q)
 
 
 -- A SQL method 
