@@ -16,16 +16,28 @@ instance Pretty (SQLSt k v) where
         where ts = showTableSpec tableSpec
               vals = showSQLRow expr2ins
     pretty x = case x of 
-	{
+    {
         Update tb to arg -> text "UPDATE" <> (showTableSpec tb) <> text "SET" <> (prettySQLToClause to arg);
         Delete tb from -> text "DELETE" <> (prettySQLFromClause from) <> text "From" <> (showTableSpec tb);
-		SetRef (Ref_ var) exp -> text "SET @" <> (prettyNametoDoc var) <> text "=" <> (showSQLRow exp);
+        SetRef (Ref_ var) exp -> text "SET @" <> (prettyNametoDoc var) <> text "=" <> (showSQLRow exp);
+        DropTable tb -> text "DROP TABLE" <> (showTableSpec tb);
+        NewRef tb a b -> text "SET"<> (newRefOne tb) <> text "\n" <> (newRefOne tb) <> text ":" <> text "\n\t" <>(newRefTwo a) <> text "=" <> (prettyNewRef b);
+		-- MakeTable tbl
+		-- Insert _ _
+		-- IfSQL _ _ _
+		-- _:>>= _
     }
 
-   -- pretty (Delete ..)
+-- pretty (Delete ..) <-- why is this here?
 showTableSpec :: TableSpec t -> Doc
-showTableSpec (MkTableSpec (Ref name)) = text (show(getName name))
+showTableSpec mktspec = case mktspec of 
+    (MkTableSpec (Ref name)) -> text (show(getName name))
 
+newRefOne :: SQLTypeS a1 -> Doc
+newRefOne = error "TODO"
+
+newRefTwo :: Maybe String -> Doc
+newRefTwo = error "TODO"
 
 showSQLRow :: SQLVal a -> Doc
 showSQLRow (SQLScalarVal x) = text(show(prettyValueExpr theDialect x))
@@ -33,6 +45,9 @@ showSQLRow (SQLQueryVal x) = text(show(prettyQueryExpr theDialect x))
 
 --[TODO : showSQLVal to String]
 --showSQLVal :: SQLVal -> String
+
+prettyNewRef :: Maybe (SQLVal a1) -> Doc
+prettyNewRef = error "TODO"
 
 getName x = prettyValueExpr theDialect $ Iden [x]
 theDialect :: Dialect 
