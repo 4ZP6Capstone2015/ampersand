@@ -26,6 +26,7 @@ import qualified GHC.Exts as Exts
 import Language.SQL.SimpleSQL.Syntax (Name(..))
 import Database.Design.Ampersand.ECA2SQL.Equality 
 import Database.Design.Ampersand.ECA2SQL.Singletons
+import Control.DeepSeq
 
 instance IsString Name where fromString = Name 
 
@@ -131,35 +132,11 @@ type family CaseOrdering (x :: Ordering) (a :: k) (b :: k) (c :: k) :: k where
   CaseOrdering 'GT a b c = c 
 
 --
-{-
-type family IsUniqueOrdered (xs :: [Symbol]) :: Bool where 
-  IsUniqueOrdered '[] = 'True  
-  IsUniqueOrdered '[ a ] = 'True 
-  IsUniqueOrdered (a ': b ': r) = CaseOrdering (TL.CmpSymbol a b) (IsUniqueOrdered (b ': r)) 'False 'False 
-
-type family UniqueOrdered (xs :: [Symbol]) :: Constraint where 
-  UniqueOrdered '[] = () 
-  UniqueOrdered '[ a ] = () 
-  UniqueOrdered (a ': b ': r) = (TL.CmpSymbol a b ~ 'LT, TL.CmpSymbol b a ~ 'GT, UniqueOrdered (b ': r))
- 
-type UniqueOrderedLabels xs = UniqueOrdered (RecLabels xs) 
--}
-
--- type family IsSetRec_ (xs :: [k]) (seen :: [k]) :: Bool where 
---   IsSetRec_ '[] seen = 'True 
---   IsSetRec_ (x ': xs) seen = 
-
-eq_is_eq :: (x == y) :~: 'True -> x :~: y 
-eq_is_eq Refl = triviallyTrue
-
-neq_is_neq :: ((x :~: y) -> Void) -> (x == y) :~: 'False 
-neq_is_neq = undefined 
-
 decEq :: SingKind ('KProxy :: KProxy a) => SingT (x :: a) -> SingT (y :: a) -> SingT (x == y) 
 decEq x y = 
   case x %== y of 
     Yes Refl -> STrue 
-    -- No q     -> case neq_is_neq q of { Refl -> SFalse }
+    No q     -> case neq_is_neq q of { Refl -> SFalse } 
 
 type family IsNotElem (xs :: [k]) (x :: k) :: Constraint where 
   IsNotElem '[] x = () 
@@ -174,35 +151,46 @@ type family IsSetRec (xs :: [RecLabel a b]) :: Constraint where
   IsSetRec xs = IsSetRec_ xs '[] 
 
 data NotElem (xs :: [k]) (x :: k) where 
-  NotElemNil :: NotElem '[] x 
-  NotElemCons :: ((x :~: y) -> Void) -> NotElem xs y -> NotElem (x ': xs) y 
+  NotElem_Nil :: NotElem '[] x 
+  NotElem_Cons :: !(Not (x :~: y)) -> !(NotElem xs y) -> NotElem (x ': xs) y 
 
 data SetRec_ (seen :: [a]) (xs :: [RecLabel a b]) where 
-  SetRecNil :: SetRec_ s '[] 
-  SetRecCOns :: NotElem seen a -> SetRec_ (a ': seen) r -> SetRec_ seen ((a ::: t0) ': r) 
+  SetRec_Nil :: SetRec_ s '[] 
+  SetRec_Cons :: !(NotElem seen a) -> !(SetRec_ (a ': seen) r) -> SetRec_ seen ((a ::: t0) ': r) 
+
+instance NFData (NotElem a b) where rnf x = x `seq` () 
+instance NFData (SetRec_ a b) where rnf x = x `seq` ()  
 
 type SetRec = SetRec_ '[] 
 
-openSetRec :: (SingKind ('KProxy :: KProxy k)) => SetRec (xs :: [RecLabel k k']) -> (IsSetRec xs => r) -> r
-openSetRec = undefined 
--- openSetRec SetRec_Nil k = k 
--- openSetRec SetRec_Singl k = k 
--- openSetRec (SetRec_More Refl r) k = openSetRec r k 
+openSetRec :: forall xs r0 . (SingKind ('KProxy :: KProxy k)) => SetRec (xs :: [RecLabel k k']) -> (IsSetRec xs => r0) -> r0
+openSetRec = openSetRec_ where 
+  openSetRec_ :: forall seen ys r . (SingKind ('KProxy :: KProxy k)) => SetRec_ seen (ys :: [RecLabel k k']) -> (IsSetRec_ ys seen => r) -> r
+  openSetRec_ SetRec_Nil k = k 
+  openSetRec_ (SetRec_Cons x xs) k = openNotElem x $ openSetRec_ xs k 
+ 
+  openNotElem :: forall qs q r . NotElem (qs :: [k]) (q :: k) -> (IsNotElem qs q => r) -> r 
+  openNotElem NotElem_Nil k = k 
+  openNotElem (NotElem_Cons x xs) k = case neq_is_neq x of { Refl -> openNotElem xs k } 
 
-decSetRec :: (SingKind ('KProxy :: KProxy a)) => SingT (xs :: [RecLabel a b]) -> Dec (SetRec xs)
-decSetRec = undefined 
--- decSetRec (SingT WNil) = Yes SetRec_Nil 
--- decSetRec (SingT (WCons _ WNil)) = Yes SetRec_Singl 
+decNotElem :: (SingKind ('KProxy :: KProxy a)) => SingT (xs :: [a]) -> SingT (x :: a) -> Dec (NotElem xs x) 
+decNotElem (SingT WNil) _ = Yes NotElem_Nil 
+decNotElem (SingT (WCons (x :: SingWitness 'KProxy x0 t0) (xs :: SingWitness 'KProxy xs0 ts0))) e = 
+  case (decNotElem (SingT xs) e, SingT x %== e) of 
+    (Yes p, No q) -> Yes (NotElem_Cons q p) 
+    (No p, _) -> No (mapNeg (\case { NotElem_Cons _ q -> q ; _ -> error "decNotElem:impossible" }) p) 
+    (_, Yes Refl) -> case triviallyFalse :: Not (() :~: Int) of 
+                       q -> No (mapNeg (\case { NotElem_Cons p _ -> case elimNeg p Refl of{} ; _ -> error "decNotElem:impossible" }) q)  
 
--- decSetRec (SingT (WCons (WRecLabel x _) r@(WCons (WRecLabel y _) _))) = 
---   case SingT x %== SingT y of 
---     Yes q -> No $ \q' -> q' `seq` (\case{} $ q)
---     No  q -> 
---       case decSetRec (SingT r) of 
---         Yes p -> Yes (SetRec_More (q `seq` unsafeCoerce (Refl :: () :~: ())) p)
---         No  p -> No $ \case { SetRec_More _ p' -> p p' }
-
-
+decSetRec :: forall xs . (SingKind ('KProxy :: KProxy a)) => SingT (xs :: [RecLabel a b]) -> Dec (SetRec xs)
+decSetRec = go (SingT WNil) where 
+  go :: forall (ys :: [RecLabel a b]) seen . SingT seen -> SingT ys -> Dec (SetRec_ seen ys) 
+  go _seen (SingT WNil) = Yes SetRec_Nil
+  go seen@(SingT seen') (SingT (WCons (WRecLabel wnm _wty) xs)) = 
+    case (decNotElem seen (SingT wnm), go (SingT (WCons wnm seen')) (SingT xs)) of 
+      (Yes p, Yes q) -> Yes (SetRec_Cons p q) 
+      (No p, _) -> No (mapNeg (\case { SetRec_Cons x0 _ -> x0; _ -> error "decSetRec:impossible" }) p) 
+      (_, No p) -> No (mapNeg (\case { SetRec_Cons _ x0 -> x0; _ -> error "decSetRec:impossible" }) p) 
 
 type family IsJust (x :: Maybe k) :: k where 
   IsJust ('Just x) = x 

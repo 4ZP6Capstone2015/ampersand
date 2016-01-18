@@ -9,7 +9,7 @@ module Database.Design.Ampersand.ECA2SQL.Equality
   , Dict(..)
   , Exists(..), (#>>) 
   , Not, elimNeg, triviallyFalse, triviallyTrue, mapNeg, notfalsum
-  , type (==) 
+  , type (==), eq_is_eq, neq_is_neq, liftDec2
   , Void, Dec(..), DecEq, mapDec, dec2bool 
   , module Data.Type.Equality
   , module GHC.Exts 
@@ -55,6 +55,12 @@ triviallyFalse = Not_ ( \case{} )
 triviallyTrue :: forall a b . ((a == b) ~ 'True) => a :~: b 
 triviallyTrue = unsafeCoerce (Refl :: a :~: a) -- TRUST ME 
 
+eq_is_eq :: (x == y) :~: 'True -> x :~: y 
+eq_is_eq Refl = triviallyTrue
+
+neq_is_neq :: Not (x :~: y) -> (x == y) :~: 'False
+neq_is_neq x = x `seq` unsafeCoerce Refl -- TRUST ME
+
 -- Strict negation. A value of type `Not p' is never inhabited by `\x ->
 -- ... undefined ...'. If you have `x :: Not p' and `y :: p` then
 -- you can be sure that `elimNot x p' is *really* a proof of `Void'. 
@@ -63,7 +69,7 @@ triviallyTrue = unsafeCoerce (Refl :: a :~: a) -- TRUST ME
 newtype Not a = Not_ (a -> Void) 
 
 notfalsum :: NFData a => Void -> Not a 
-notfalsum v = Not_ (\x -> rnf x `seq` v)
+notfalsum v = v `seq` Not_ (\x -> rnf x `seq` v)
 
 mapNeg :: NFData b => (b -> a) -> Not a -> Not b 
 mapNeg f (Not_ q) = Not_ (\x -> q (f $!! x)) 
@@ -88,6 +94,11 @@ type DecEq a b = Dec (a :~: b)
 mapDec :: (p -> q) -> (Not p -> Not q) -> Dec p -> Dec q
 mapDec yes _ (Yes x) = Yes (yes x) 
 mapDec _ no (No y) = No (no y) 
+
+liftDec2 :: Dec p -> Dec q -> (p -> q -> r) -> (Not p -> Not r) -> (Not q -> Not r) -> Dec r 
+liftDec2 (Yes p) (Yes q) yes _ _ = Yes (yes p q) 
+liftDec2 (No p) _ _ no _ = No (no p) 
+liftDec2 _ (No p) _ _ no = No (no p)
 
 dec2bool :: DecEq a b -> Bool
 dec2bool = \case { Yes{} -> True; No{} -> False } 
