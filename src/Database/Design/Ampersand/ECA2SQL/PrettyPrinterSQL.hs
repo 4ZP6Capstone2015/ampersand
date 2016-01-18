@@ -26,7 +26,7 @@ instance Pretty (SQLSt k v) where
         DropTable tb -> text "DROP TABLE" <> (showTableSpec tb);
         NewRef tb a b -> text "SET"<> (newRefOne tb) <> text "\n" <> (newRefOne tb) <> text ":" <> text "\n\t" <>(newRefTwo a) <> text "=" <> (prettyNewRef b);
 		-- MakeTable tbl
-		-- Insert _ _
+		-- Insert _ _ 
 		-- IfSQL _ _ _
 		-- _:>>= _
     }
@@ -42,12 +42,12 @@ newRefOne = error "TODO"
 newRefTwo :: Maybe String -> Doc
 newRefTwo = error "TODO"
 
-showSQLRow :: SQLVal a -> String
+showSQLRow :: SQLVal a -> String -- can we make Doc please?
 showSQLRow (SQLScalarVal x) = prettyValueExpr theDialect x
 showSQLRow (SQLQueryVal x) = prettyQueryExpr theDialect x
 
 -- pretty (Delete ..)
-showTableSpec :: TableSpec t -> String
+showTableSpec :: TableSpec t -> String -- can we also make this into Doc please?
 showTableSpec (MkTableSpec (Ref name)) = getName name
 
 
