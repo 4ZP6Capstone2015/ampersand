@@ -78,7 +78,7 @@ validateEditScript fSpec beforePops afterPops editScriptPath =
     }
   where showValsSQL p = ((showValSQL.apLeft) p, (showValSQL.apRight) p)
 createTempDatabase :: FSpec -> [Population] -> IO ()
-createTempDatabase fSpec pops =
+createTempDatabase fSpec _pops =
  do { _ <- executePHPStr . showPHP $ sqlServerConnectPHP fSpec ++
                                      createTempDbPHP tempDbName ++
                                      createTablesPHP fSpec ++
@@ -98,10 +98,10 @@ getSqlConceptTable fSpec c =
                     []                      -> fatal 58  "No concept table for concept \"" ++ name c ++ "\""
                     (table,conceptAttribute):_ -> "SELECT DISTINCT `" ++ attName conceptAttribute ++ "` as `src`, NULL as `tgt`"++
                                                   " FROM `" ++ name table ++ "`" ++
-                                                  " WHERE `" ++ attName conceptAttribute ++ "` IS NOT NULL"						
-						
-				
-					
+                                                  " WHERE `" ++ attName conceptAttribute ++ "` IS NOT NULL"                        
+                        
+                
+                    
     --; putStrLn $ "Query for concept " ++ name c ++ ":" ++ query 
     ; atomsDummies <- performQuery (getOpts fSpec) tempDbName query
     ; return (c, map fst atomsDummies)
@@ -110,11 +110,11 @@ getSqlConceptTable fSpec c =
 -- getAllSqlConcept :: FSpec -> A_Concept -> IO (A_Concept, [String])
 -- getAllSqlConcept fSpec d =
 --  do { 
--- 		let query = case lookupCpt fSpec d of
--- 		-- 				[]					-> fatal 58 "No tables exist under concept" ++ name d ++
--- 		-- 				(table, conceptAttribute): _ -> "SELECT * `" ++attName conceptAttribute ++ "` as s`rc`, NULL as `tgt`" ++
--- 		-- 												" FROM `" ++ name table ++"`" ++
-														
+--         let query = case lookupCpt fSpec d of
+--         --                 []                    -> fatal 58 "No tables exist under concept" ++ name d ++
+--         --                 (table, conceptAttribute): _ -> "SELECT * `" ++attName conceptAttribute ++ "` as s`rc`, NULL as `tgt`" ++
+--         --                                                 " FROM `" ++ name table ++"`" ++
+                                                        
 --     ; atomsDummies <- performQuery (getOpts fSpec) tempDbName query
 --     ; return (e, map fst atomsDummies)
 --  }
@@ -122,10 +122,10 @@ getSqlConceptTable fSpec c =
 -- getAllSqlTables :: FSpec -> IO([String])
 -- getAllSqlTables fSpec q = 
 -- do {
--- 		let query = case of q
--- 						[] 					-> "SHOW TABLES"
--- 						(table)				-> "Explain `" ++ name table ++"`"
--- 						(_) 				-> fatal 58 "Error, no args needed"
+--         let query = case of q
+--                         []                     -> "SHOW TABLES"
+--                         (table)                -> "Explain `" ++ name table ++"`"
+--                         (_)                 -> fatal 58 "Error, no args needed"
 -- }
  
 
