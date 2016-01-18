@@ -15,7 +15,11 @@ instance Pretty (SQLSt k v) where
     pretty (Insert tableSpec expr2ins) = text "INSERT INTO" <+> (text ts) <+> text "VALUES " <+> lparen  <+> (text vals) <+> rparen 
         where ts = showTableSpec tableSpec
               vals = showSQLRow expr2ins
-   
+   pretty x = case x of {
+        Update tb to arg -> text "UPDATE" <> (showTableSpec tb) <> text "SET" <> (prettySQLToClause to arg)
+		Delete tb from -> text "DELETE"  <> (prettySQLFromClause from) <> text "From" <> (showTableSpec tb)
+   } 
+
    -- pretty (Delete ..)
 showTableSpec :: TableSpec t -> String
 showTableSpec (MkTableSpec (Ref name)) = getName name
@@ -31,3 +35,14 @@ showSQLRow (SQLQueryVal x) = (prettyQueryExpr theDialect x)
 getName x = prettyValueExpr theDialect $ Iden [x]
 theDialect :: Dialect 
 theDialect = MySQL
+
+
+prettySQLToClause:: (SQLVal ('SQLRow ts) -> SQLVal 'SQLBool) -> (SQLVal ('SQLRow ts) -> SQLVal ('SQLRow ts)) -> Doc
+prettySQLToClause = error "TODO"
+
+
+prettySQLFromClause :: (SQLVal ('SQLRow ts) -> SQLVal 'SQLBool) -> Doc -- ts is list of named types
+prettySQLFromClause = error "TODO"
+
+prettySQLAtoB :: (SQLVal a -> SQLVal b) -> Doc
+prettySQLAtoB = errror "TODO" -- look at SQLVal, find how to get it to doc
