@@ -6,8 +6,9 @@ module Database.Design.Ampersand.ECA2SQL.PrettyPrinterSQL () where
 import Text.PrettyPrint.Leijen hiding ((<$>)) 
 import Language.SQL.SimpleSQL.Syntax
 import Language.SQL.SimpleSQL.Pretty
-import Database.Design.Ampersand.ECA2SQL.TypedSQL
+import Database.Design.Ampersand.ECA2SQL.TypedSQL hiding (PAclause(Ref))
 import Database.Design.Ampersand.ECA2SQL.Singletons
+import Database.Design.Ampersand.Core.AbstractSyntaxTree (ECArule(..))
 import Database.Design.Ampersand.ECA2SQL.Utils 
 import Data.List (intercalate,intersperse)
 import Data.List.Utils (replace)
