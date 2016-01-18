@@ -12,13 +12,15 @@ import Data.Char (toUpper)
 
 --TableSpec ts -> SQLVal ('SQLRel ('SQLRow ts))
 instance Pretty (SQLSt k v) where
-    pretty (Insert tableSpec expr2ins) = text "INSERT INTO" <+> (text ts) <+> text "VALUES " <+> lparen  <+> (text vals) <+> rparen 
+    pretty (Insert tableSpec expr2ins) = text "INSERT INTO" <+> ts <+> text "VALUES " <+> lparen  <+> vals <+> rparen 
         where ts = showTableSpec tableSpec
               vals = showSQLRow expr2ins
     pretty x = case x of 
-        Update tb to arg -> text "UPDATE" <> (showTableSpec tb) <> text "SET" <> (prettySQLToClause to arg) 
-        Delete tb from -> text "DELETE" <> (prettySQLFromClause from) <> text "From" <> (showTableSpec tb)
-    
+	{
+        Update tb to arg -> text "UPDATE" <> (showTableSpec tb) <> text "SET" <> (prettySQLToClause to arg);
+        Delete tb from -> text "DELETE" <> (prettySQLFromClause from) <> text "From" <> (showTableSpec tb);
+		SetRef (Ref_ var) exp -> text "SET @" <> (prettyNametoDoc var) <> text "=" <> (showSQLRow exp);
+    }
 
    -- pretty (Delete ..)
 showTableSpec :: TableSpec t -> Doc
@@ -36,7 +38,8 @@ getName x = prettyValueExpr theDialect $ Iden [x]
 theDialect :: Dialect 
 theDialect = MySQL
 
-
+prettyNametoDoc :: Name -> Doc
+prettyNametoDoc = error "TODO"
 prettySQLToClause:: (SQLVal ('SQLRow ts) -> SQLVal 'SQLBool) -> (SQLVal ('SQLRow ts) -> SQLVal ('SQLRow ts)) -> Doc
 prettySQLToClause = error "TODO"
 
