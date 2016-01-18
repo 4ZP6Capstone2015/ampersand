@@ -18,29 +18,28 @@ instance Pretty ECArule where
 
 instance Pretty (SQLSt k v) where
     pretty (Insert tableSpec_ expr2ins) = text "INSERT INTO" <+> showTableSpec tableSpec_ <+> text "VALUES " <+> lparen  <+> showSQLVal expr2ins <+> rparen 
-    pretty (Delete tableSpec_ from) = foldl1 (<>) 
+    pretty (Delete tableSpec_ from) = foldl1 
       [ text "DELETE FROM" 
       , showTableSpec tableSpec_
       , text " WHERE " 
       , withSingT (typeOfTableSpec tableSpec_) $ \_ -> prettySQLFromClause from
       ]
-
     pretty x = case x of 
-    {
-        Update tb to arg -> withSingT (typeOfTableSpec tb) $ \_ -> 
+     {  IfSQL cnd t0 t1 -> 
+	                      text "SELECT IF" <> lparen <> (ifSQLfun cnd) <> text "," <> (ifSQLexpr t0) <> text "," (ifSQLexpr t1) <> rparen;
+		Update tb to arg -> withSingT (typeOfTableSpec tb) $ \_ -> 
                             text "UPDATE" <> (showTableSpec tb) <> text "SET" <> (prettySQLToClause to arg);
-        Delete tb from -> withSingT (typeOfTableSpec tb) $ \_ -> 
-                            text "DELETE" <> (prettySQLFromClause from) <> text "From" <> (showTableSpec tb);
+        -- Delete tb from -> withSingT (typeOfTableSpec tb) $ \_ -> 
+                            -- text "DELETE FROM" <> (prettySQLFromClause from) <> text "WHERE" <> (showTableSpec tb);
         SetRef (Ref_ var) exp' -> text "SET @" <> (prettyNametoDoc var) <> text "=" <> (showSQLVal exp');
         DropTable tb -> text "DROP TABLE" <> (showTableSpec tb);
+		MakeTable tbl -> 
+		               text "CREATE TABLE" <> maketable tbl <> lparen <> maketable tbl <> text "," <> maketable tbl <> rparen -- need to find (col_ name, col_type)
 
+		-- _:>>= _
         -- YT: this is wrong! Read the comments on NewRef 
         -- NewRef tb a b -> text "SET"<> (newRefOne tb) <> text "\n" <> (newRefOne tb) <> text ":" <> text "\n\t" <> text "=" <> (prettyNewRef b);
-        -- MakeTable tbl
-        -- Insert _ _ 
-        -- IfSQL _ _ _
-        -- _:>>= _
-    }
+
 
     {-Update tb to arg -> text "UPDATE" <> (showTableSpec tb) <> text "SET" <> (prettySQLToClause to arg);
       SetRef (Ref_ var) exp -> text "SET @" <> (prettyNametoDoc var) <> text "=" <> (showSQLVal exp);
@@ -61,11 +60,18 @@ showTableSpec (TableAlias_ _ t) = showTableSpec t
 prettySQLFromClause :: forall ts . (Sing ('SQLRow ts)) => (SQLVal ('SQLRow ts) -> SQLVal 'SQLBool) -> Doc -- ts is list of named types
 prettySQLFromClause = prettySQLAtoB 
   -- showSQLVal $ f (SQLQueryVal (Table [UQName "Unique"]) :: SQLVal ('SQLRow ts)) 
- 
 
+ifSQLcnd :: SQLVal 'SQLBool -> Doc
+ifSQLfun = error "TODO"
+
+ifSQLexpr ::  SQLSt t2 v -> Doc
+ifSQLexpr = error "TODO"
 -- testing () = failure 
 
 --[TODO PART BELOW]
+
+maketable :: SQLTypeS ('SQLRow t) -> Doc
+maketable = error "TODO"
 
 prettyNametoDoc :: Name -> Doc
 prettyNametoDoc = text . getName
