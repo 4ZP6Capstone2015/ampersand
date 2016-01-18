@@ -132,24 +132,6 @@ type family CaseOrdering (x :: Ordering) (a :: k) (b :: k) (c :: k) :: k where
   CaseOrdering 'GT a b c = c 
 
 --
-{-
-type family IsUniqueOrdered (xs :: [Symbol]) :: Bool where 
-  IsUniqueOrdered '[] = 'True  
-  IsUniqueOrdered '[ a ] = 'True 
-  IsUniqueOrdered (a ': b ': r) = CaseOrdering (TL.CmpSymbol a b) (IsUniqueOrdered (b ': r)) 'False 'False 
-
-type family UniqueOrdered (xs :: [Symbol]) :: Constraint where 
-  UniqueOrdered '[] = () 
-  UniqueOrdered '[ a ] = () 
-  UniqueOrdered (a ': b ': r) = (TL.CmpSymbol a b ~ 'LT, TL.CmpSymbol b a ~ 'GT, UniqueOrdered (b ': r))
- 
-type UniqueOrderedLabels xs = UniqueOrdered (RecLabels xs) 
--}
-
--- type family IsSetRec_ (xs :: [k]) (seen :: [k]) :: Bool where 
---   IsSetRec_ '[] seen = 'True 
---   IsSetRec_ (x ': xs) seen = 
-
 decEq :: SingKind ('KProxy :: KProxy a) => SingT (x :: a) -> SingT (y :: a) -> SingT (x == y) 
 decEq x y = 
   case x %== y of 
