@@ -8,7 +8,7 @@ module Database.Design.Ampersand.ECA2SQL.Equality
   ( cong, cong2, cong3
   , Dict(..)
   , Exists(..), (#>>) 
-  , Not, elimNeg, triviallyFalse, triviallyTrue, mapNeg, notfalsum
+  , Not, elimNeg, triviallyFalse, triviallyTrue, mapNeg, notfalsum, notprim
   , type (==), eq_is_eq, neq_is_neq, liftDec2
   , Void, Dec(..), DecEq, mapDec, dec2bool 
   , module Data.Type.Equality
@@ -67,6 +67,10 @@ neq_is_neq x = x `seq` unsafeCoerce Refl -- TRUST ME
 -- Since it is a newtype, it is also not inhabited by `undefined'.
 
 newtype Not a = Not_ (a -> Void) 
+
+-- primitive constructor of negation without any unsafecoerce
+notprim :: (a ~ b) => Not (Not (a :~: b))
+notprim = Not_ $ \(Not_ x) -> x Refl 
 
 -- Given a proof of false, we can derive any proof.  Semantically this is the
 -- same as `absurd' but operationally it is not. 
