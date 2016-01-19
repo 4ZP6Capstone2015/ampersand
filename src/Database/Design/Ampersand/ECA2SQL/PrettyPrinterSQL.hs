@@ -26,7 +26,7 @@ instance Pretty (SQLSt k v) where
       ]
     pretty x = case x of 
      {  IfSQL cnd t0 t1 -> 
-                          text "SELECT IF" <> lparen <> (ifSQLfun cnd) <> text "," <> (ifSQLexpr t0) <> text "," <> (ifSQLexpr t1) <> rparen;
+                          text "SELECT IF" <> lparen <> (ifSQLexpr cnd) <> text "," <> (ifSQLexpr t0) <> text "," <> (ifSQLexpr t1) <> rparen;
         Update tb to arg -> withSingT (typeOfTableSpec tb) $ \_ -> 
                             text "UPDATE" <> (showTableSpec tb) <> text "SET" <> (prettySQLToClause to arg);
         -- Delete tb from -> withSingT (typeOfTableSpec tb) $ \_ -> 
@@ -61,21 +61,28 @@ showTableSpec (TableAlias_ _ t) = showTableSpec t
 prettySQLFromClause :: forall ts . (Sing ('SQLRow ts)) => (SQLVal ('SQLRow ts) -> SQLVal 'SQLBool) -> Doc -- ts is list of named types
 prettySQLFromClause = prettySQLAtoB 
   -- showSQLVal $ f (SQLQueryVal (Table [UQName "Unique"]) :: SQLVal ('SQLRow ts)) 
-
-ifSQLfun :: SQLVal 'SQLBool -> Doc
-ifSQLfun = error "TODO"
-
-ifSQLexpr ::  SQLSt t2 v -> Doc
-ifSQLexpr = error "TODO"
+ifSQLexpr ::  SQLSt a b -> Doc -- takes function with 2 args (x :: SQLSem) (a :: SQLRefType)
+ifSQLexpr = error "TODO" 
+ -- ifSQLexpr fn a b = 
+       -- let (a,b) =
+            -- do 
+            -- case x of 
+                -- Stmt                 -> prettyValueExpr Stmt theDialect
+                -- Mthd                 -> _ Mthd
+            -- -- case a of
+                -- -- Ty SQLType                  -> _ Ty SQLType
+                -- -- SQLRef SQLType              -> _ SQLRef SQLType
+                -- -- SQLUnit                     -> _ SQLUnit
+                -- -- SQLMethod [SQLType] SQLType -> _ SQLMethod [SQLType] SQLType
+       -- in ifSQLexpr $ fn (x,a)
 -- testing () = failure 
-
 --[TODO PART BELOW]
-
 maketable :: SQLTypeS ('SQLRow t) -> Doc
 maketable = error "TODO"
+-- maketable = text $ prettyQueryExpr theDialect
 
 prettyNametoDoc :: Name -> Doc
-prettyNametoDoc = text . getName
+    prettyNametoDoc = text . getName
 
 prettySQLToClause:: (Sing ('SQLRow ts)) => (SQLVal ('SQLRow ts) -> SQLVal 'SQLBool) -> (SQLVal ('SQLRow ts) -> SQLVal ('SQLRow ts)) -> Doc
 prettySQLToClause f g = prettySQLAtoB f <> text "TO" <> prettySQLAtoB g 
