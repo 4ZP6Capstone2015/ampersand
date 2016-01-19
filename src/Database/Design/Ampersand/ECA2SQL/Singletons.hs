@@ -23,8 +23,8 @@ testval0 = sing :: SingT '( 'Just 10, '[ "x", "y" ] )
 --
 
 data TyRep = TyCtr Symbol [TyRep] 
-           | TyPrimNat TL.Nat 
-           | TyPrimSym TL.Symbol 
+           | TyPrimNat TL.Nat  -- represents types by constructure and list of arguments; Natural numbers and strings of type level, use type level strings to label tables; Nat = natural numbers
+           | TyPrimSym TL.Symbol -- Sym = Symbol, type literals, strings; GHCI supports literals and comparisons associated with those literals
 
 -- Generic singleton class, defining singletons for a kind in terms of 
 -- an isomorphism between that type and a TyRep. 
@@ -33,6 +33,7 @@ class (kp ~ 'KProxy) => SingKind (kp :: KProxy k) where
 
   -- proof that each witness produces a rep of the correct type. 
   witness :: SingWitness kp x xr -> (TyRepOf x :~: xr, Dict (TyRepSingI xr))
+  --
  
   -- Proof of the isomorphism. The default implementation uses unsafeCoerce,
   -- which will work only if everything is defined properly, perhaps there is a
@@ -126,7 +127,7 @@ eqTyRep (STyCtr nm0 args0) (STyCtr nm1 args1) =
         Yes Refl -> Yes Refl 
         No p -> No $ mapNeg (\case {Refl -> Refl}) p
 
-eqTyRep STySym{} STyCtr{} = No triviallyFalse
+eqTyRep STySym{} STyCtr{} = No triviallyFalse -- {} is wild card for large data structures, or large records 
 eqTyRep STyCtr{} STySym{} = No triviallyFalse
 eqTyRep STyNat{} STyCtr{} = No triviallyFalse
 eqTyRep STyCtr{} STyNat{} = No triviallyFalse 
@@ -135,14 +136,14 @@ eqTyRep (STyNat _) (STySym _) = No triviallyFalse
     
 -- Singletons of some kind in terms of their type rep. Using the constructor is safe. 
 data SingT (x :: k) where  
-  SingT :: SingWitness ('KProxy :: KProxy k) (x :: k) x_rep -> SingT x
+  SingT :: SingWitness ('KProxy :: KProxy k) (x :: k) x_rep -> SingT x -- singleton witnesses for that datatype; accepts value for any representation; construct in a way that invalid values are not possible
 
-elimSingT :: SingT x -> (forall xr . SingWitness 'KProxy x xr -> r) -> r 
-elimSingT (SingT x) f = f x 
+elimSingT :: SingT x -> (forall xr . SingWitness 'KProxy x xr -> r) -> r  -- x_rep is quantified, universally quantified function, given a sing witness of any representation type returns value r; passing in an arg that scrutinizes is invalid
+elimSingT (SingT x) f = f x  -- exist f is the same as for all types a such that there is a type g to f
 
 class (WitnessSingI x, TyRepSingI (TyRepOf x)) => Sing x where sing :: SingT x 
 instance (WitnessSingI x, TyRepSingI (TyRepOf x)) => Sing x where sing = SingT witnessSing
-
+-- witness; witnesses the proof of something; x0 = gamma x for proof of existance where x0 is a witness
 -- Based on http://okmij.org/ftp/Haskell/tr-15-04.pdf and
 -- https://hackage.haskell.org/package/reflection-2.1.1.1/docs/src/Data-Reflection.html#reify
 
@@ -156,9 +157,10 @@ withSingT a k = unsafeCoerce (Magic k :: Magic x r) a Proxy
 (%==) :: SingKind ('KProxy :: KProxy k) => SingT (x :: k) -> SingT y -> DecEq x y 
 (%==) (SingT x) (SingT y) = 
   case (witness x, witness y) of { ((Refl, Dict), (Refl, Dict)) -> 
-  case eqTyRep (tyRepOfW x) (tyRepOfW y) of 
-    Yes p -> Yes $ singKindWitness1 p x y 
-    No p -> No (mapNeg (\q -> singKindWitness2 q x y ) p) } 
+  case eqTyRep (tyRepOfW x) (tyRepOfW y) of  --eqTyRep compares type reps, not the singleton 
+    Yes p -> Yes $ singKindWitness1 p x y  -- proof of equality (p)
+    No p -> No (mapNeg (\q -> singKindWitness2 q x y ) p) }  -- if types are equal; if two type reps are equal then the types are equal; Singleton needs representations of two types and decide of those representations are the same; uses kindWitness function to prove injectivity
+-- %== decideable equality, if you have a value of singleton type; this function allows you to make arbitrary comparisons to it; e.g., when you construct a row, a name must be unique -- expressed at type level, list of names that carry type information such that when you pattern match on it, you gain type information; this give you the ability to write proofs using pattern matching; when you get the type returned
 ------- Basic types
 -- Bool
 
@@ -235,11 +237,11 @@ instance (SingKind ('KProxy :: KProxy a), SingKind ('KProxy :: KProxy b))
   => SingKind ('KProxy :: KProxy (a,b)) where 
 
     data SingWitness ('KProxy :: KProxy (a,b)) x args where 
-      WTup2 :: !(SingWitness 'KProxy va arep) -> !(SingWitness 'KProxy vb brep)
+      WTup2 :: !(SingWitness 'KProxy va arep) -> !(SingWitness 'KProxy vb brep) -- ! means strict field, difference between lazy and strict fields; if you know the substructure is strict then the entire thing becomes strict 
                 -> SingWitness 'KProxy '((va :: a), (vb :: b)) ( 'TyCtr "(,)" '[ arep, brep ] )  
                     
     witness (WTup2 a b) = 
-      case (witness a, witness b) of { ((Refl, Dict), (Refl, Dict)) -> (Refl, Dict) }
+      case (witness a, witness b) of { ((Refl, Dict), (Refl, Dict)) -> (Refl, Dict) } -- pattenr match and return trivial proof, the compiler know the proofs, you can return refl or dict; witness proves single returns type representation coorresponding to the type inside of it 
 {-  
     singKindWitness1 Refl (WTup2 a b) (WTup2 a' b') = 
       case (singKindWitness1 Refl a a', singKindWitness1 Refl b b') of { (Refl, Refl) -> Refl }

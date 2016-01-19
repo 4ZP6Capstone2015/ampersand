@@ -127,11 +127,10 @@ ifSQLfun = error "TODO"
 ifSQLexpr ::  SQLSt t2 v -> Doc
 ifSQLexpr = error "TODO"
 -- testing () = failure 
-
 --[TODO PART BELOW]
-
-maketable :: SQLTypeS ('SQLRow t) -> Doc
+--maketable :: SQLTypeS ('SQLRow t) -> Doc
 maketable = error "TODO"
+-- maketable = text $ prettyQueryExpr theDialect
 
 prettyNametoDoc :: Name -> Doc
 prettyNametoDoc = text . getName

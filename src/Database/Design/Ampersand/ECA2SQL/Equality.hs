@@ -34,7 +34,7 @@ cong3 Refl Refl Refl Refl = Refl
 instance NFData (a :~: b) where rnf Refl = () 
 
 -- Reify a class as a value
-data Dict p where Dict :: p => Dict p 
+data Dict p where Dict :: p => Dict p -- patern matched will return a proof of p; where p is a class restraint like show; can write things like Dict Eq list -> Dict List; it will figure it out via pattern matching
 
 -- Existence proof 
 data Exists p where Ex :: p x -> Exists p
@@ -89,8 +89,8 @@ instance Show Void where
   show x = case x of {} 
 
 data Dec p where 
-  Yes :: !p -> Dec p 
-  No  :: !(Not p) -> Dec p 
+  Yes :: !p -> Dec p  -- !p is a strict value of p that is not bottom
+  No  :: !(Not p) -> Dec p  -- other wise it is not p, a value of dec p => exclude middle holds 
 
 instance Show (Dec p) where 
   show = \case { Yes{} -> "Yes"; No{} -> "No" } 
