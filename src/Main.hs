@@ -13,8 +13,13 @@ import Database.Design.Ampersand.Prototype.Generate    (generateGenerics)
 import Database.Design.Ampersand.Output.ToJSON.ToJson  (generateJSONfiles)
 import Database.Design.Ampersand.Prototype.GenFrontend (doGenFrontend, clearTemplateDirs)
 import Database.Design.Ampersand.Prototype.ValidateSQL (validateRulesSQL)
-import Database.Design.Ampersand.ECA2SQL.PrettyPrinterSQL ()
+import Database.Design.Ampersand.ECA2SQL.PrettyPrinterSQL (eca2PrettySQL)
 import Text.PrettyPrint.Leijen (Pretty(..))
+import qualified Text.PrettyPrint.Leijen as P
+import Text.Printf (printf) 
+import Control.Exception (catch, Handler(..), ErrorCall(..), IOException, SomeException(..), AssertionFailed(..), throwIO
+                         , Exception(..))
+import qualified Data.Typeable as Typ
 
 main :: IO ()
 main =
@@ -26,20 +31,46 @@ main =
               Errors err    -> do putStrLn "Error(s) found:"
                                   mapM_ putStrLn (intersperse  (replicate 30 '=') (map showErr err))
                                   exitWith $ ExitFailure 10
-              Checked fSpec -> do when printECAInfo $ printECAInfoFSPec opts fSpec 
+              Checked fSpec -> do when printECAInfo $ printECAInfoFSPec fSpec 
                                   generateAmpersandOutput  fSpec
                                   generateProtoStuff       fSpec
 
 
 
 
+-- -I ../ampersand-models/Examples/ProjectAdministration -o ../ampersand-models/Examples/ProjectAdministration ProjectAdministration.adl --print-eca-info
+printECAInfoFSPec :: FSpec -> IO ()  
+printECAInfoFSPec fSpec@FSpec{..} = do
+  let opts = getOpts 
+      printSep x = print x >> putStrLn (replicate 15 '=') 
+      reallyShowADL :: ECArule -> String 
+      reallyShowADL (ECA trgr param cls ruleN) = show $ P.vsep  
+        [ P.text "ECA Rule #" P.<> P.int ruleN 
+        , P.hsep [ P.text "ON", P.text (show trgr), P.text "INTO", P.text (show param), P.text "DO" ]
+        , P.nest 4 $ P.vsep $ map P.text $ lines $ showADL cls 
+        ] 
+             
+      -- Deal with exceptions by printing them and continuing for testing purposes
+      handleExceptions :: String -> IO () -> IO () 
+      handleExceptions nm ac = catch ac hndlr where 
+          allowedExcpts = [ Typ.typeOf (undefined :: IOException) 
+                          , Typ.typeOf (undefined :: ErrorCall) 
+                          , Typ.typeOf (undefined :: AssertionFailed) 
+                          ]
+          hndlr (SomeException e) = do 
+            let allowed = Typ.typeOf e `elem` allowedExcpts 
+            printf "An%s exception of %s (of type %s) occured while trying to evaluate [%s]\n" 
+              (if allowed then "" else " unexpected") (show e) (show $ Typ.typeOf e) nm 
+            when (not allowed) (throwIO e) 
+            
 
-printECAInfoFSPec :: Options -> FSpec -> IO ()  
-printECAInfoFSPec opts fSpec@FSpec{..} = do
-  putStrLn $ "The name of the specification is " ++ fsName 
-  validatedRules <- validateRulesSQL fSpec 
-  putStrLn $ "Output of specification :" ++ show validatedRules -- ++ rulename ++'\n' ++ "SQL Rules" ++ validatedSQLRules 
-  putStrLn $ "Violations:" ++ show getOpts ++ "\n" ++ "Rule Violated:" ++ show grules ++ "\t" ++ show vrules 
+  handleExceptions "name" $ do 
+    putStrLn $ "The name of the specification is " ++ fsName 
+
+  handleExceptions "validateSQL" $ do 
+    validatedRules <- validateRulesSQL fSpec 
+    putStrLn $ "Output of specification :" ++ show validatedRules -- ++ rulename ++'\n' ++ "SQL Rules" ++ validatedSQLRules 
+    putStrLn $ "Violations:" ++ "Rule Violated:" ++ show grules ++ "\t" ++ show vrules 
 
   let violationsOfInvariants :: [(Rule,[AAtomPair])]
       violationsOfInvariants
@@ -58,18 +89,25 @@ printECAInfoFSPec opts fSpec@FSpec{..} = do
       showprs :: [AAtomPair] -> String
       showprs aprs = "["++intercalate ", " (map showADL aprs)++"]"
 
-  reportViolations violationsOfInvariants
-  maybe (putStrLn "No test rule.") id $ ruleTest fSpec <$> testRule getOpts 
+  handleExceptions "invariants" $ do 
+    reportViolations violationsOfInvariants
+    maybe (putStrLn "No test rule.") id $ ruleTest fSpec <$> testRule getOpts 
   
-  putStrLn $ "All SQL concept tables"
-  mapM_ print $ 
-    [(plug,att) |InternalPlug plug@TblSQL{}<-plugInfos, (c,att)<-cLkpTbl plug]++
-    [(plug,att) |InternalPlug plug@BinSQL{}<-plugInfos, (c,att)<-cLkpTbl plug]++
-    [(plug,sqlColumn plug) |InternalPlug plug@ScalarSQL{}<-plugInfos] 
+  handleExceptions "concept tables" $ do 
+    putStrLn $ "All SQL concept tables"
+    mapM_ print $ 
+      [(plug,att) |InternalPlug plug@TblSQL{}<-plugInfos, (_,att)<-cLkpTbl plug]++
+      [(plug,att) |InternalPlug plug@BinSQL{}<-plugInfos, (_,att)<-cLkpTbl plug]++
+      [(plug,sqlColumn plug) |InternalPlug plug@ScalarSQL{}<-plugInfos] 
 
-  putStrLn "ECA rules [ Haskell ]" >> mapM_ (putStrLn . showHS opts "") vEcas
-  putStrLn "ECA rules [ ADL ]" >> mapM_ (putStrLn . showADL) vEcas
-  putStrLn "ECA rules [ SQL ]" >> mapM_ (print . pretty) vEcas 
+  handleExceptions "eca - hs" $ 
+    putStrLn "ECA rules [ Haskell ]" >> mapM_ (putStrLn . showHS opts "") vEcas
+
+  handleExceptions "eca - hs" $ 
+    putStrLn "ECA rules [ ADL ]" >> mapM_ (putStrLn . reallyShowADL) vEcas
+
+  putStrLn "ECA rules [ SQL ]" 
+  mapM_ (\eca -> handleExceptions ("eca" ++ show (ecaNum eca) ++ " - hs") . printSep . eca2PrettySQL fSpec $ eca) vEcas 
   
   
 

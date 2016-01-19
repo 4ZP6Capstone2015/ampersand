@@ -299,8 +299,9 @@ instance ShowADL A_Context where
 
 instance ShowADL (Maybe String) where
   showADL _ = ""
+
 instance ShowADL ECArule where
-  showADL eca = "ECA #"++show (ecaNum eca)
+  showADL eca = "ECA #"++show (ecaNum eca) 
 
 instance ShowADL Event where
   showADL ev = " On " ++show (eSrt ev)++" "++showREL (eDcl ev)
