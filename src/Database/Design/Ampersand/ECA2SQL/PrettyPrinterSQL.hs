@@ -26,7 +26,7 @@ instance Pretty (SQLSt k v) where
       ]
     pretty x = case x of 
      {  IfSQL cnd t0 t1 -> 
-                          text "SELECT IF" <> lparen <> (ifSQLexpr cnd) <> text "," <> (ifSQLexpr t0) <> text "," <> (ifSQLexpr t1) <> rparen;
+                          text "SELECT IF" <> lparen <> (showSQLVal cnd) <> text "," <> pretty t0 <> text "," <> pretty t1 <> rparen;
         Update tb to arg -> withSingT (typeOfTableSpec tb) $ \_ -> 
                             text "UPDATE" <> (showTableSpec tb) <> text "SET" <> (prettySQLToClause to arg);
         -- Delete tb from -> withSingT (typeOfTableSpec tb) $ \_ -> 
@@ -60,23 +60,8 @@ showTableSpec (TableAlias_ _ t) = showTableSpec t
 --case for delete predicate
 prettySQLFromClause :: forall ts . (Sing ('SQLRow ts)) => (SQLVal ('SQLRow ts) -> SQLVal 'SQLBool) -> Doc -- ts is list of named types
 prettySQLFromClause = prettySQLAtoB 
-  -- showSQLVal $ f (SQLQueryVal (Table [UQName "Unique"]) :: SQLVal ('SQLRow ts)) 
---ifSQLexpr ::  SQLSt a b -> Doc -- takes function with 2 args (x :: SQLSem) (a :: SQLRefType)
-ifSQLexpr = error "TODO" 
- -- ifSQLexpr fn a b = 
-       -- let (a,b) =
-            -- do 
-            -- case x of 
-                -- Stmt                 -> prettyValueExpr Stmt theDialect
-                -- Mthd                 -> _ Mthd
-            -- -- case a of
-                -- -- Ty SQLType                  -> _ Ty SQLType
-                -- -- SQLRef SQLType              -> _ SQLRef SQLType
-                -- -- SQLUnit                     -> _ SQLUnit
-                -- -- SQLMethod [SQLType] SQLType -> _ SQLMethod [SQLType] SQLType
-       -- in ifSQLexpr $ fn (x,a)
--- testing () = failure 
---[TODO PART BELOW]
+  -- showSQLVal $ f (SQLQueryVal (Table [UQName "Unique"]) :: SQLVal ('SQLRow ts))
+
 --maketable :: SQLTypeS ('SQLRow t) -> Doc
 maketable = error "TODO"
 -- maketable = text $ prettyQueryExpr theDialect
