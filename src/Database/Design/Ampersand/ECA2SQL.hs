@@ -8,14 +8,14 @@ module Database.Design.Ampersand.ECA2SQL
 
 import Database.Design.Ampersand.Core.AbstractSyntaxTree 
   ( ECArule(..), PAclause(..), Expression(..), Declaration(..), AAtomValue(..), InsDel(..), Event(..)
-  , A_Context(..), ObjectDef(..), ObjectDef(..), Origin(..), Cruds(..)
+  , A_Context(..), ObjectDef(..), ObjectDef(..), Origin(..), Cruds(..), Signature(..) 
   )
 import Database.Design.Ampersand.FSpec (FSpec(..)) 
 import Language.SQL.SimpleSQL.Syntax 
   ( QueryExpr(..), ValueExpr(..), Name(..), TableRef(..), InPredValue(..), SubQueryExprType(..) 
   , makeSelect
   ) 
-import Database.Design.Ampersand.FSpec.FSpec (PlugSQL(..), PlugInfo(..))
+import Database.Design.Ampersand.FSpec.FSpec (PlugSQL(..), PlugInfo(..), SqlAttribute(..), SqlAttributeUsage(..), SqlTType(SQLVarchar))
 import Database.Design.Ampersand.FSpec.ToFSpec.ADL2Plug 
 import Database.Design.Ampersand.FSpec.SQL (expr2SQL,prettySQLQuery) --added Bin,to,Pretty
 import Database.Design.Ampersand.FSpec.FSpecAux (getDeclarationTableInfo,getConceptTableInfo)
@@ -33,10 +33,17 @@ decl2TableSpec :: FSpec -> Declaration ->  TableSpec '[ "src" ::: 'SQLAtom, "tgt
 decl2TableSpec fSpec decl = 
   let (plug,src,tgt) = 
         case decl of 
-          Sgn{} -> getDeclarationTableInfo fSpec decl 
-          Isn{} -> let (p,a) = getConceptTableInfo fSpec (detyp decl) in (p,a,a)
+          Sgn{} -> case getDeclarationTableInfo fSpec decl of { (p,a,b) -> (p,name a,name b) }
+          Isn{} -> let (p,a) = getConceptTableInfo fSpec (detyp decl) 
+                   in (p,name a, freshName (name a) 1)
+                    
           Vs{}  -> error "decl2TableSpec: V[_,_] not expected here"
-  in tableSpec (QName $ name plug) sing 
+  in tableSpec' (Name $ name plug) ((K src :*: SingT WSQLAtom) :> (K tgt :*: SingT WSQLAtom) :> PNil) $ \case 
+       Just (Refl,tb) -> TableAlias_ (sing :: SingT '[ "src", "tgt" ]) tb 
+       Nothing -> error $ "decl2TableSpec: declaration did not produce unique table spec:\n" 
+                    ++ show (src, tgt) 
+
+
 
 -- TODO: This function could do with some comments 
 -- TODO: Test eca2SQL
@@ -46,20 +53,46 @@ decl2TableSpec fSpec decl =
 -- TODO: Add the motives in comments to the generated code 
 
 eca2SQL :: FSpec -> ECArule -> SQLMethod '[] 'SQLBool
-eca2SQL fSpec@FSpec{originalContext,plugInfos} (ECA _ delta action _) =  
-  MkSQLMethod $ \PNil -> 
+eca2SQL fSpec@FSpec{plugInfos} (ECA _ delta action _) =  
+  MkSQLMethod sing $ \PNil -> 
     NewRef sing (Just "checkDone") (Just T.false) :>>= \checkDone -> 
     paClause2SQL action checkDone :>>= \_ -> 
     SQLRet (deref checkDone)
   
       where 
-        -- TODO: Figure out how this plug stuff works... 
-        deltaObj = Obj 
-          { objnm = name delta, objpos = OriginUnknown, objctx = EDcD delta
-          , objcrud = Cruds OriginUnknown (Just True) (Just True) (Just True) (Just True) 
-          , objmsub = Nothing, objstrs = [], objmView = Nothing 
+        -- renameECA :: Declaration -> ECArule -> ECArule 
+
+        -- -- TODO: Figure out how this plug stuff works... 
+        -- deltaCtx = case delta of 
+        --             Sgn{decsgn = Sign a _} -> EDcI a -- ???? 
+        --             Isn{detyp} -> EDcI detyp
+        --             _ -> error "eca2SQL/deltaCtx:???"
+                     
+        -- deltaObj = Obj 
+        --   { objnm = name delta, objpos = OriginUnknown, objctx = deltaCtx 
+        --   , objcrud = Cruds OriginUnknown (Just True) (Just True) (Just True) (Just True) 
+        --   , objmsub = Nothing, objstrs = [], objmView = Nothing 
+        --   }
+        -- deltaPlug = makeUserDefinedSqlPlug originalContext deltaObj
+        deltaPlug = BinSQL 
+          { sqlname = name delta 
+          , columns = ( Att { attName = "src" 
+                            , attExpr = EDcD delta    
+                            , attType = SQLVarchar 255 
+                            , attUse  = PlainAttr
+                            , attNull = True
+                            , attUniq = True }
+                      , Att { attName = "tgt" 
+                            , attExpr = EDcD delta    
+                            , attType = SQLVarchar 255 
+                            , attUse  = PlainAttr
+                            , attNull = True
+                            , attUniq = True }
+                      )
+          , cLkpTbl = [] --  ??? [(A_Concept, SqlAttribute)]
+          , mLkp = EDcD delta -- :: Expression
           }
-        deltaPlug = makeUserDefinedSqlPlug originalContext deltaObj
+
         fSpec' = fSpec { plugInfos = InternalPlug deltaPlug : plugInfos } 
         expr2SQL' = expr2SQL fSpec'             -- calling expr2SQL function from SQL.hs
                                                 -- returns a QueryExpr (for a select query)  
@@ -72,7 +105,7 @@ eca2SQL fSpec@FSpec{originalContext,plugInfos} (ECA _ delta action _) =
                     Sgn{} -> decnm delta        -- returns the name of the declaration 
                     _ -> error "eca2SQL: Got a delta which is not a parameter"
         
-        paClause2SQL :: PAclause -> (SQLValRef 'SQLBool -> SQLStatement 'SQLUnit)
+        paClause2SQL :: PAclause -> SQLValRef 'SQLBool -> SQLStatement 'SQLUnit
 
         paClause2SQL (Do Ins insInto toIns _motive) = \k ->                    -- PAClause case of Insert
           let tbl = decl2TableSpec fSpec insInto in 

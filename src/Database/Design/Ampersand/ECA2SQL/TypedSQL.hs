@@ -95,6 +95,10 @@ type family IsScalarType (x :: k) :: Bool where
   IsScalarType ('SQLVec x) = 'False
   IsScalarType 'SQLBool = 'True
   IsScalarType 'SQLAtom = 'True
+
+type family IsScalarTypes (x :: [SQLType]) :: Bool where 
+  IsScalarTypes '[] = 'True 
+  IsScalarTypes (x ': xs) = IsScalarType x && IsScalarTypes xs 
   
 isScalarType :: SingT (x :: SQLType) -> SingT (IsScalarType x)
 isScalarType (SingT x) = 
@@ -104,6 +108,11 @@ isScalarType (SingT x) =
     (WSQLVec _vs0) -> SFalse 
     (WSQLRow _ts0) -> SFalse 
     (WSQLRel _) -> SFalse   
+
+isScalarTypes :: SingT xs -> SingT (IsScalarTypes xs) 
+isScalarTypes s = elimSingT s $ \case 
+  WNil -> STrue 
+  WCons x xs -> isScalarType (SingT x) |&& isScalarTypes (SingT xs)
 
 -- A SQL value contains value expressions. Using the constructors directly is unsafe. 
 -- The type of underlying prim expr is dependant on whether it is a scalar type or not. 
@@ -130,7 +139,7 @@ data SQLValSem (x :: SQLRefType) where
 -- Pattern match only (no constructor syntax). These permit access (but not the
 -- ability to construct) to the underlying untyped representation. 
 pattern Method nm <- Method_ nm 
-pattern Ref x <- Ref_ x 
+pattern GetRef x <- Ref_ x 
 
 -- Get the sql type of a semantic value which represens a value or reference
 -- to an actual type. 
@@ -160,6 +169,9 @@ unsafeSqlValFromName nm =
 unsafeSQLValFromQuery :: forall xs . (NonEmpty xs, Sing ('SQLRel ('SQLRow xs))) => QueryExpr -> SQLVal ('SQLRel ('SQLRow xs))
 unsafeSQLValFromQuery = SQLQueryVal
 
+unsafeRefFromName :: SingT x -> Name -> SQLValRef x
+unsafeRefFromName ty nm = withSingT ty $ \_ -> Ref_ nm
+
 deref :: forall x . SQLValRef x -> SQLVal x 
 deref (Ref_ nm) = unsafeSqlValFromName nm 
 
@@ -179,8 +191,8 @@ typeOfTableSpec t = t `seq`
   let q :: forall q . TableSpec q -> Dict (NonEmpty q &*& IsSetRec q)
       q t' = 
         case t' of 
-          (MkTableSpec (typeOfSem -> SingT (WSQLRel (WSQLRow zs)))) -> Dict 
-          (TableAlias_ _ y) -> q t' 
+          (MkTableSpec (typeOfSem -> SingT (WSQLRel (WSQLRow _)))) -> Dict 
+          (TableAlias_ _ _) -> q t' 
 
   in case typeOfTableSpec' t of 
        SingT x -> case unsafeCoerce (q t) :: Dict (NonEmpty t &*& IsSetRec t) of 
@@ -207,6 +219,36 @@ tableSpec tn xs@(SingT x) =
     WNil -> impossible assert "NonEmpty exists but given type is the empty list" () 
     WCons{} -> MkTableSpec $ withSingT xs $ \_ -> Ref_ tn 
 
+-- Can return nothing if the set of names is not valid 
+tableSpec' :: Name -> Prod (K String :*: SingT) tys -> (forall ks . Maybe (RecAssocs ks :~: tys, TableSpec ks) -> r) -> r
+tableSpec' nm0 tys0 k0 = 
+    tr tys0 $ \case 
+      Nothing -> k0 Nothing 
+      Just (pr,ty@(SingT ty')) -> 
+        case (decSetRec ty, ty') of 
+          (Yes p, WCons{}) -> openSetRec p $ k0 $ Just (pr, tableSpec nm0 (SingT ty'))
+          (Yes{}, WNil{}) -> k0 Nothing
+          (No{},_) -> k0 Nothing
+  where 
+    tr :: Prod (K String :*: SingT) tys -> (forall (ks :: [RecLabel Symbol SQLType]) 
+            . Maybe (RecAssocs ks :~: tys, SingT ks) -> r) -> r
+    tr PNil k = k Nothing 
+    tr (PCons (K nm :*: SingT x) PNil) k = 
+        case TL.someSymbolVal nm of 
+          TL.SomeSymbol nmTy -> k (Just (Refl, SingT (WCons (WRecLabel (WSymbol nmTy) x) WNil ) )) 
+    tr (PCons (K nm :*: (SingT x :: SingT x0)) xs@PCons{}) k = 
+      tr xs $ \case 
+         Nothing -> k Nothing 
+         Just (Refl, SingT rs) -> 
+           case TL.someSymbolVal nm of 
+             TL.SomeSymbol nmTy -> k (Just (Refl, SingT (WCons (WRecLabel (WSymbol nmTy) x) rs ) )) 
+
+-- k (Just (_ {-Refl-}, _)) -- SingT (WSQLRow (WCons (WRecLabel _ x) rs)) ))
+
+
+               -- case SingT (WSymbol nmTy) %== e of 
+               --   SingT False -> 
+
 -- Create an table spec from runtime information. Returns Nothing if the table
 -- would not be valid. 
 someTableSpec :: Name -> [(String, Exists SQLTypeS)] -> Maybe (Exists TableSpec) 
@@ -229,11 +271,13 @@ someTableSpec tn cols =
 
 -- A SQL method 
 data SQLMethod ts out where 
-  MkSQLMethod :: (Prod (SQLValSem :.: 'SQLRef) ts -> SQLSt 'Mthd ('Ty out)) -> SQLMethod ts out 
+  MkSQLMethod :: {-(IsScalarTypes ts ~ 'True, IsScalarType out ~ 'True) -} () 
+              => SingT ts -> (Prod (SQLValSem :.: 'SQLRef) ts -> SQLSt 'Mthd ('Ty out)) -> SQLMethod ts out 
   -- A method with a set of input parameters. The function takes a vector of
   -- references of those types.
 
-  SQLMethodWithFormalParams :: Prod (SQLValSem :.: 'SQLRef) ts -> SQLSt 'Mthd ('Ty out) -> SQLMethod ts out 
+  SQLMethodWithFormalParams :: {-(IsScalarTypes ts ~ 'True, IsScalarType out ~ 'True) -} () 
+                            => Prod (SQLValSem :.: 'SQLRef) ts -> SQLSt 'Mthd ('Ty out) -> SQLMethod ts out 
   -- A method with formal parameters - using this is considered unsafe. 
 
 -- Used to distinguish sql methods from statements. The only difference is that
@@ -274,7 +318,7 @@ data SQLSt (x :: SQLSem) (a :: SQLRefType) where
   -- are never bound in the tree. Perhaps there should be some sort of 
   -- "assumptions" constructor for tables?
 
-  IfSQL :: SQLVal 'SQLBool -> SQLSt t0 a -> SQLSt t1 a -> SQLStatement a   
+  IfSQL :: SQLVal 'SQLBool -> SQLSt t0 a -> SQLSt t1 b -> SQLStatement 'SQLUnit
   -- An If statement takes a boolean valued expression. 
  
   (:>>=) :: SQLStatement a -> (SQLValSem a -> SQLSt x b) -> SQLSt x b 
@@ -283,6 +327,6 @@ data SQLSt (x :: SQLSem) (a :: SQLRefType) where
   -- Semantics. Only allowed for sql types. 
 
   SQLFunCall :: SQLMethodRef ts out -> Prod SQLVal ts -> SQLStatement ('Ty out) 
-  SQLDefunMethod :: Maybe String -> SQLMethod ts out -> SQLStatement ('SQLMethod ts out)
+  SQLDefunMethod :: SQLMethod ts out -> SQLStatement ('SQLMethod ts out)
   -- Methods 
 

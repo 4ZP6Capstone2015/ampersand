@@ -49,8 +49,33 @@ sing2prod (SingT x0) = go x0 where
   go :: forall (xs' :: [k]) rep . SingWitness 'KProxy xs' rep -> Prod SingT xs'
   go WNil = PNil 
   go (WCons x xs) = PCons (SingT x) (go xs) 
+
+{-
+foldrProd : forall (k : *) (f : k -> *) (xs : [k]) (acc : *) (o : k -> acc -> acc) (g : acc -> *)
+          -> Prod f xs 
+          -> g [] 
+          -> (forall (a : acc) -> pi (x : k) -> g a -> g (o x a)) 
+          -> g xs
+the real type 
+-}
+
+foldrProd :: acc -> (forall q . f q -> acc -> acc) -> Prod f xs -> acc 
+foldrProd z _ PNil = z 
+foldrProd z f (PCons x xs) = f x (foldrProd z f xs) 
+
+foldrProd' :: (forall x xs . f x -> Prod g xs -> Prod g (x ': xs)) 
+            -> Prod f xs1 -> Prod g xs1 
+foldrProd' _ PNil = PNil 
+foldrProd' f (PCons x xs) = f x (foldrProd' f xs) 
+
+foldlProd :: acc -> (forall q . f q -> acc -> acc) -> Prod f xs -> acc 
+foldlProd z _ PNil = z 
+foldlProd z f (PCons x xs) = foldlProd (f x z) f xs 
   
-  
+mapProd :: (forall x . f x -> g x) -> Prod f xs -> Prod g xs
+mapProd _ PNil = PNil 
+mapProd f (PCons x xs) = PCons (f x) (mapProd f xs)
+
 infixr 5 :> 
 pattern x :> xs = PCons x xs 
 
@@ -92,7 +117,7 @@ data (:*:) (f :: k0 -> *) (g :: k0 -> *) (x :: k0) = (:*:) (f x) (g x)
 newtype K a (x :: k) = K { unK :: a } 
 newtype Id a = Id { unId :: a } 
 
--- Type level OR 
+-- Type level AND 
 type family (&&) (x :: Bool) (y :: Bool) :: Bool where 
   'False && x = 'False 
   x && 'False = 'False 
@@ -103,6 +128,15 @@ SFalse |&& _ = SFalse
 _ |&& SFalse = SFalse 
 STrue |&& STrue = STrue 
 x |&& y = impossible assert "Bool not {T,F}" (x `seq` y `seq` () )
+
+type family And (xs :: [Bool]) :: Bool where 
+  And '[] = 'True 
+  And (x ': xs) = x && And xs 
+
+and_t :: SingT xs -> SingT (And xs)
+and_t (SingT WNil) = STrue 
+and_t (SingT (WCons x xs)) = SingT x |&& and_t (SingT xs)
+
 
 -- Symbol 
 symbolKindProxy = Proxy :: Proxy ('KProxy :: KProxy Symbol)
@@ -283,4 +317,7 @@ instance (f o ~ r) => Uncurry f '[] o r where
 instance (Uncurry f args o r, q ~ (f arg -> r)) => Uncurry f (arg ': args) o q where 
   uncurryN f arg = uncurryN (f . PCons arg) 
 
+-- fresh names
 
+freshName :: String -> Int -> String 
+freshName nm count = nm ++ show count
