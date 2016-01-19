@@ -39,6 +39,7 @@ instance Pretty (SQLSt k v) where
         -- _:>>= _
         -- YT: this is wrong! Read the comments on NewRef 
         -- NewRef tb a b -> text "SET"<> (newRefOne tb) <> text "\n" <> (newRefOne tb) <> text ":" <> text "\n\t" <> text "=" <> (prettyNewRef b);
+        -- newRef takes string argument, its a maybe string a suggested name for the fresh name; string for semantic name
 
 
     {-Update tb to arg -> text "UPDATE" <> (showTableSpec tb) <> text "SET" <> (prettySQLToClause to arg);
