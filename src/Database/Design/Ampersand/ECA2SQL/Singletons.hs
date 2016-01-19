@@ -35,20 +35,20 @@ class (kp ~ 'KProxy) => SingKind (kp :: KProxy k) where
   witness :: SingWitness kp x xr -> (TyRepOf x :~: xr, Dict (TyRepSingI xr))
   --
  
-  -- Proof of the isomorphism. The default implementation uses unsafeCoerce,
+  -- Proof of the isomorphism. The default implementation uses safeCoerce,
   -- which will work only if everything is defined properly, perhaps there is a
   -- good way of making that explicit.
   singKindWitness1 :: rep0 :~: rep1
                    -> SingWitness kp ty0 rep0 
                    -> SingWitness kp ty1 rep1 
                    -> ty0 :~: ty1 
-  singKindWitness1 x a b = a `seq` b `seq` unsafeCoerce x 
+  singKindWitness1 x a b = a `seq` b `seq` safeCoerce x 
 
   singKindWitness2 :: ty0 :~: ty1 
                    -> SingWitness kp ty0 rep0 
                    -> SingWitness kp ty1 rep1 
                    -> rep0 :~: rep1
-  singKindWitness2 x a b = a `seq` b `seq` unsafeCoerce x 
+  singKindWitness2 x a b = a `seq` b `seq` safeCoerce x 
 
   type ValOfSing (kp :: KProxy k)  
 
@@ -150,7 +150,7 @@ instance (WitnessSingI x, TyRepSingI (TyRepOf x)) => Sing x where sing = SingT w
 newtype Magic x r = Magic (Sing x => Proxy x -> r)
 
 withSingT :: forall (x :: k) r . SingT x -> (Sing x => Proxy x -> r) -> r
-withSingT a k = unsafeCoerce (Magic k :: Magic x r) a Proxy
+withSingT a k = safeCoerce (Magic k :: Magic x r) a Proxy
 {-# INLINE withSingT #-}
 
 -- You can compare singletons based on their type rep. 

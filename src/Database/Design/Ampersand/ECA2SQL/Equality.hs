@@ -13,6 +13,7 @@ module Database.Design.Ampersand.ECA2SQL.Equality
   , Void, Dec(..), DecEq, mapDec, dec2bool 
   , module Data.Type.Equality
   , module GHC.Exts 
+  , safeCoerce
   ) where 
 
 import GHC.Exts (Constraint)
@@ -53,13 +54,13 @@ triviallyFalse :: ((a == b) ~ 'False) => Not (a :~: b)
 triviallyFalse = Not_ ( \case{} )
 
 triviallyTrue :: forall a b . ((a == b) ~ 'True) => a :~: b 
-triviallyTrue = unsafeCoerce (Refl :: a :~: a) -- TRUST ME 
+triviallyTrue = safeCoerce (Refl :: a :~: a) -- TRUST ME 
 
 eq_is_eq :: (x == y) :~: 'True -> x :~: y 
 eq_is_eq Refl = triviallyTrue
 
 neq_is_neq :: Not (x :~: y) -> (x == y) :~: 'False
-neq_is_neq x = x `seq` unsafeCoerce Refl -- TRUST ME
+neq_is_neq x = x `seq` safeCoerce Refl -- TRUST ME
 
 -- Strict negation. A value of type `Not p' is never inhabited by `\x ->
 -- ... undefined ...'. If you have `x :: Not p' and `y :: p` then
@@ -109,3 +110,10 @@ liftDec2 _ (No p) _ _ no = No (no p)
 dec2bool :: DecEq a b -> Bool
 dec2bool = \case { Yes{} -> True; No{} -> False } 
  
+
+
+
+
+-- for debugging  
+safeCoerce :: a -> b
+safeCoerce x = error "unsafeCoerce"

@@ -53,38 +53,6 @@ instance Pretty (SQLTypeS x) where
     WSQLAtom -> "VARCHAR(255)" 
     _ -> error "pretty{SQLTypeS}:todo"
 
-instance Pretty (SQLSt k v) where
-    pretty (Insert tableSpec_ expr2ins) = text "INSERT INTO" <+> showTableSpec tableSpec_ <+> text "VALUES " <+> lparen  <+> showSQLVal expr2ins <+> rparen 
-    pretty (Delete tableSpec_ from) = foldl1 (<>) 
-      [ text "DELETE FROM" 
-      , showTableSpec tableSpec_
-      , text " WHERE " 
-      , withSingT (typeOfTableSpec tableSpec_) $ \_ -> prettySQLFromClause from
-      ]
-    pretty x = case x of 
-     {  IfSQL cnd t0 t1 -> 
-                          text "SELECT IF" <> lparen <> (showSQLVal cnd) <> text "," <> pretty t0 <> text "," <> pretty t1 <> rparen;
-        Update tb to arg -> withSingT (typeOfTableSpec tb) $ \_ -> 
-                            text "UPDATE" <> (showTableSpec tb) <> text "SET" <> (prettySQLToClause to arg);
-        -- Delete tb from -> withSingT (typeOfTableSpec tb) $ \_ -> 
-                            -- text "DELETE FROM" <> (prettySQLFromClause from) <> text "WHERE" <> (showTableSpec tb);
-        SetRef (Ref_ var) exp' -> text "SET @" <> (prettyNametoDoc var) <> text "=" <> (showSQLVal exp');
-        DropTable tb -> text "DROP TABLE" <> (showTableSpec tb);
-        MakeTable tbl -> 
-                       text "CREATE TABLE" <> maketable tbl <> lparen <> maketable tbl <> text "," <> maketable tbl <> rparen -- need to find (col_ name, col_type)
-      }
-        -- _:>>= _
-        -- YT: this is wrong! Read the comments on NewRef 
-        -- NewRef tb a b -> text "SET"<> (newRefOne tb) <> text "\n" <> (newRefOne tb) <> text ":" <> text "\n\t" <> text "=" <> (prettyNewRef b);
-        -- newRef takes string argument, its a maybe string a suggested name for the fresh name; string for semantic name
-
-
-    {-Update tb to arg -> text "UPDATE" <> (showTableSpec tb) <> text "SET" <> (prettySQLToClause to arg);
-      SetRef (Ref_ var) exp -> text "SET @" <> (prettyNametoDoc var) <> text "=" <> (showSQLVal exp);
-        -}
-    
---Update tableSpec to arg -> text "UPDATE" <> (showTableSpec tableSpec) <> text " SET " <> (prettySQLToClause to arg)
-
 instance Pretty (SQLSt k v) where pretty = prettySqlSt
   
 
@@ -111,8 +79,8 @@ prettyRec (Delete tableSpec_ from) = retUnit $ foldl1 (<>)
   , withSingT (typeOfTableSpec tableSpec_) $ \_ -> prettySQLFromClause from
   ]
 prettyRec (IfSQL cnd t0 t1) = 
-  case prettyRec t0 of { (ppr_t0, val_t0) -> 
-  case prettyRec t1 of { (ppr_t1, val_t1) -> retUnit $ 
+  case prettyRec t0 of { (ppr_t0, _val_t0) -> 
+  case prettyRec t1 of { (ppr_t1, _val_t1) -> retUnit $ 
     text "SELECT IF" <> lparen <> (ifSQLfun cnd) <> text "," <> ppr_t0 <> text "," <> ppr_t1 <> rparen
   }}                         
 
@@ -160,12 +128,9 @@ prettySQLFromClause = prettySQLAtoB
 ifSQLfun :: SQLVal 'SQLBool -> Doc
 ifSQLfun = error "TODO"
 
-ifSQLexpr ::  SQLSt t2 v -> Doc
-ifSQLexpr = error "TODO"
 -- testing () = failure 
 --[TODO PART BELOW]
 --maketable :: SQLTypeS ('SQLRow t) -> Doc
-maketable = error "TODO"
 -- maketable = text $ prettyQueryExpr theDialect
 
 prettyNametoDoc :: Name -> Doc

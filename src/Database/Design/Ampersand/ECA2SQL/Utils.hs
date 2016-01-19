@@ -146,12 +146,12 @@ compareSymbol' (SingT (WSymbol x)) (SingT (WSymbol y)) = compareSymbol x y
 
 compareSymbol :: forall x y . (TL.KnownSymbol x, TL.KnownSymbol y) => Proxy x -> Proxy y -> SingT (TL.CmpSymbol x y)
 compareSymbol x y =  
-  let trustMe :: forall a b . a :~: b 
-      trustMe = unsafeCoerce (Refl :: () :~: ())
+  let rf :: TL.CmpSymbol x y :~: TL.CmpSymbol x y 
+      rf = Refl 
   in case compare (TL.symbolVal x) (TL.symbolVal y) of 
-       LT -> case trustMe :: TL.CmpSymbol x y :~: 'LT of { Refl -> SLT }
-       EQ -> case trustMe :: TL.CmpSymbol x y :~: 'EQ of { Refl -> SEQ }
-       GT -> case trustMe :: TL.CmpSymbol x y :~: 'GT of { Refl -> SGT }
+       LT -> case safeCoerce rf :: TL.CmpSymbol x y :~: 'LT of { Refl -> SLT }
+       EQ -> case safeCoerce rf :: TL.CmpSymbol x y :~: 'EQ of { Refl -> SEQ }
+       GT -> case safeCoerce rf :: TL.CmpSymbol x y :~: 'GT of { Refl -> SGT }
 
 type family RecAssocs (xs :: [RecLabel a b]) :: [b] where 
   RecAssocs '[] = '[] 
@@ -321,3 +321,5 @@ instance (Uncurry f args o r, q ~ (f arg -> r)) => Uncurry f (arg ': args) o q w
 
 freshName :: String -> Int -> String 
 freshName nm count = nm ++ show count
+
+
