@@ -61,7 +61,7 @@ showTableSpec (TableAlias_ _ t) = showTableSpec t
 prettySQLFromClause :: forall ts . (Sing ('SQLRow ts)) => (SQLVal ('SQLRow ts) -> SQLVal 'SQLBool) -> Doc -- ts is list of named types
 prettySQLFromClause = prettySQLAtoB 
   -- showSQLVal $ f (SQLQueryVal (Table [UQName "Unique"]) :: SQLVal ('SQLRow ts)) 
-ifSQLexpr ::  SQLSt a b -> Doc -- takes function with 2 args (x :: SQLSem) (a :: SQLRefType)
+--ifSQLexpr ::  SQLSt a b -> Doc -- takes function with 2 args (x :: SQLSem) (a :: SQLRefType)
 ifSQLexpr = error "TODO" 
  -- ifSQLexpr fn a b = 
        -- let (a,b) =
@@ -77,12 +77,12 @@ ifSQLexpr = error "TODO"
        -- in ifSQLexpr $ fn (x,a)
 -- testing () = failure 
 --[TODO PART BELOW]
-maketable :: SQLTypeS ('SQLRow t) -> Doc
+--maketable :: SQLTypeS ('SQLRow t) -> Doc
 maketable = error "TODO"
 -- maketable = text $ prettyQueryExpr theDialect
 
 prettyNametoDoc :: Name -> Doc
-    prettyNametoDoc = text . getName
+prettyNametoDoc = text . getName
 
 prettySQLToClause:: (Sing ('SQLRow ts)) => (SQLVal ('SQLRow ts) -> SQLVal 'SQLBool) -> (SQLVal ('SQLRow ts) -> SQLVal ('SQLRow ts)) -> Doc
 prettySQLToClause f g = prettySQLAtoB f <> text "TO" <> prettySQLAtoB g 
