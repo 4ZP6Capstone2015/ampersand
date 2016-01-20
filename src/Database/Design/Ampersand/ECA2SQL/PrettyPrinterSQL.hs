@@ -17,6 +17,7 @@ import Data.List (intercalate,intersperse)
 import Data.List.Utils (replace)
 import Data.Char (toUpper)
 import Data.Coerce 
+import Debug.Trace (trace) 
 
 instance IsString Doc where 
   fromString = text 
@@ -102,7 +103,7 @@ prettyRec (NewRef refTy mbRefNm mbRefVal) =
 
 prettyRec SQLNoop = retUnit $ "SET @this_is_a_noop = 0"
 
-prettyRec (SQLRet x) = ("RETURN" <+> pretty x, error "prettyRec:shouldn't be evaluated"{-Val x-})
+prettyRec (SQLRet x) = ("RETURN" <+> pretty x,Val x)
 prettyRec _ = error "prettyRec: not yet supported" 
 
 instance Pretty (SQLVal a) where 

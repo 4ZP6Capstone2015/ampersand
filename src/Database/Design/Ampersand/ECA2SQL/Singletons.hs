@@ -3,6 +3,9 @@
 {-# LANGUAGE PartialTypeSignatures, TypeOperators #-} 
 {-# OPTIONS -fno-warn-unticked-promoted-constructors #-} 
 
+{-# OPTIONS_GHC -fno-cse #-}
+{-# OPTIONS_GHC -fno-full-laziness #-}
+{-# OPTIONS_GHC -fno-float-in #-}
 
 module Database.Design.Ampersand.ECA2SQL.Singletons  where 
 
@@ -22,6 +25,9 @@ testval0 = sing :: SingT '( 'Just 10, '[ "x", "y" ] )
 
 --
 
+withSingT :: forall (x :: k) r . (SingKind ('KProxy :: KProxy k)) => SingT x -> (Sing x => Proxy x -> r) -> r
+withSingT (SingT a) k = withSingW a k
+
 data TyRep = TyCtr Symbol [TyRep] 
            | TyPrimNat TL.Nat  -- represents types by constructure and list of arguments; Natural numbers and strings of type level, use type level strings to label tables; Nat = natural numbers
            | TyPrimSym TL.Symbol -- Sym = Symbol, type literals, strings; GHCI supports literals and comparisons associated with those literals
@@ -30,25 +36,29 @@ data TyRep = TyCtr Symbol [TyRep]
 -- an isomorphism between that type and a TyRep. 
 class (kp ~ 'KProxy) => SingKind (kp :: KProxy k) where 
   data SingWitness kp :: k -> TyRep -> *
+  
+  withSingW :: forall (x :: k) r xr . SingWitness kp x xr -> (Sing x => Proxy x -> r) -> r
 
   -- proof that each witness produces a rep of the correct type. 
   witness :: SingWitness kp x xr -> (TyRepOf x :~: xr, Dict (TyRepSingI xr))
   --
  
-  -- Proof of the isomorphism. The default implementation uses safeCoerce,
+  -- Proof of the isomorphism. The default implementation uses unsafeCoerce,
   -- which will work only if everything is defined properly, perhaps there is a
   -- good way of making that explicit.
-  singKindWitness1 :: rep0 :~: rep1
+  singKindWitness1 :: forall ty0 ty1 rep0 rep1 . rep0 :~: rep1
                    -> SingWitness kp ty0 rep0 
                    -> SingWitness kp ty1 rep1 
                    -> ty0 :~: ty1 
-  singKindWitness1 x a b = a `seq` b `seq` safeCoerce x 
+  singKindWitness1 x a b = a `seq` b `seq` safeCoerce "sing1" x 
+  -- singKindWitness1 x a b = x `seq` a `seq` b `seq` unsafeCoerce (Refl :: ty0 :~: ty0) 
 
-  singKindWitness2 :: ty0 :~: ty1 
+  singKindWitness2 :: forall ty0 ty1 rep0 rep1 . ty0 :~: ty1 
                    -> SingWitness kp ty0 rep0 
                    -> SingWitness kp ty1 rep1 
                    -> rep0 :~: rep1
-  singKindWitness2 x a b = a `seq` b `seq` safeCoerce x 
+  singKindWitness2 x a b = a `seq` b `seq` safeCoerce "sing2" x 
+  -- singKindWitness2 x a b = x `seq` a `seq` b `seq` unsafeCoerce (Refl :: rep0 :~: rep0)
 
   type ValOfSing (kp :: KProxy k)  
 
@@ -97,12 +107,12 @@ eqSymbol :: (TL.KnownSymbol x, TL.KnownSymbol y) => Proxy x -> Proxy y -> DecEq 
 eqSymbol x y = 
   case TL.sameSymbol x y of 
     Just a  -> Yes a
-    Nothing -> No ( notfalsum (impossible assert "eqSymbol" ()) )
+    Nothing -> No $ mapNeg (\case { Refl -> impossible assert "eqSymbol" () }) triviallyTrue
 
 eqProdTypRep :: TyRepSing (xs :: [TyRep]) -> TyRepSing ys -> DecEq xs ys 
 eqProdTypRep STyNil STyNil = Yes Refl
-eqProdTypRep STyNil STyCons{} = No triviallyFalse 
-eqProdTypRep STyCons{} STyNil = No triviallyFalse
+eqProdTypRep STyNil STyCons{} = No $ mapNeg (\case {}) triviallyTrue 
+eqProdTypRep STyCons{} STyNil = No $ mapNeg (\case {}) triviallyTrue 
 eqProdTypRep (STyCons x xs) (STyCons y ys) = 
   case eqTyRep x y of 
     No p -> No $ mapNeg (\case { Refl -> Refl }) p
@@ -115,9 +125,9 @@ eqTyRep :: TyRepSing (x :: TyRep) -> TyRepSing y -> DecEq x y
 eqTyRep (STyNat n0) (STyNat n1) =
   case TL.sameNat n0 n1 of 
     Just Refl -> Yes Refl
-    Nothing   -> No ( notfalsum (impossible assert "equal nats are not equal" ()) )
+    Nothing   -> No $ mapNeg (\case { Refl -> impossible assert "eqTyRep:TyNat" () }) triviallyTrue
 
-eqTyRep (STySym n0) (STySym n1) = mapDec (\case {Refl -> Refl}) (mapNeg (\case {Refl -> Refl})) $ eqSymbol n0 n1 
+eqTyRep (STySym n0) (STySym n1) = mapDec (cong Refl) (mapNeg (\case {Refl -> Refl})) $ eqSymbol n0 n1 
 
 eqTyRep (STyCtr nm0 args0) (STyCtr nm1 args1) = 
   case eqSymbol nm0 nm1 of 
@@ -127,31 +137,26 @@ eqTyRep (STyCtr nm0 args0) (STyCtr nm1 args1) =
         Yes Refl -> Yes Refl 
         No p -> No $ mapNeg (\case {Refl -> Refl}) p
 
-eqTyRep STySym{} STyCtr{} = No triviallyFalse -- {} is wild card for large data structures, or large records 
-eqTyRep STyCtr{} STySym{} = No triviallyFalse
-eqTyRep STyNat{} STyCtr{} = No triviallyFalse
-eqTyRep STyCtr{} STyNat{} = No triviallyFalse 
-eqTyRep (STySym _) (STyNat _) = No triviallyFalse 
-eqTyRep (STyNat _) (STySym _) = No triviallyFalse 
+   -- {} is wild card for large data structures, or large records 
+eqTyRep STySym{} STyCtr{} = No $ mapNeg (\case {}) triviallyTrue
+eqTyRep STyCtr{} STySym{} = No $ mapNeg (\case {}) triviallyTrue
+eqTyRep STyNat{} STyCtr{} = No $ mapNeg (\case {}) triviallyTrue
+eqTyRep STyCtr{} STyNat{} = No $ mapNeg (\case {}) triviallyTrue 
+eqTyRep (STySym _) (STyNat _) = No $ mapNeg (\case {}) triviallyTrue 
+eqTyRep (STyNat _) (STySym _) = No $ mapNeg (\case {}) triviallyTrue 
     
 -- Singletons of some kind in terms of their type rep. Using the constructor is safe. 
 data SingT (x :: k) where  
-  SingT :: SingWitness ('KProxy :: KProxy k) (x :: k) x_rep -> SingT x -- singleton witnesses for that datatype; accepts value for any representation; construct in a way that invalid values are not possible
+  SingT :: !(SingWitness ('KProxy :: KProxy k) (x :: k) x_rep) -> SingT x -- singleton witnesses for that datatype; accepts value for any representation; construct in a way that invalid values are not possible
 
 elimSingT :: SingT x -> (forall xr . SingWitness 'KProxy x xr -> r) -> r  -- x_rep is quantified, universally quantified function, given a sing witness of any representation type returns value r; passing in an arg that scrutinizes is invalid
 elimSingT (SingT x) f = f x  -- exist f is the same as for all types a such that there is a type g to f
 
-class (WitnessSingI x, TyRepSingI (TyRepOf x)) => Sing x where sing :: SingT x 
-instance (WitnessSingI x, TyRepSingI (TyRepOf x)) => Sing x where sing = SingT witnessSing
--- witness; witnesses the proof of something; x0 = gamma x for proof of existance where x0 is a witness
--- Based on http://okmij.org/ftp/Haskell/tr-15-04.pdf and
--- https://hackage.haskell.org/package/reflection-2.1.1.1/docs/src/Data-Reflection.html#reify
+class (WitnessSingI x, TyRepSingI (TyRepOf x)) => Sing x where 
+  sing :: SingT x 
+instance (WitnessSingI x, TyRepSingI (TyRepOf x)) => Sing x where 
+  sing = SingT witnessSing
 
-newtype Magic x r = Magic (Sing x => Proxy x -> r)
-
-withSingT :: forall (x :: k) r . SingT x -> (Sing x => Proxy x -> r) -> r
-withSingT a k = safeCoerce (Magic k :: Magic x r) a Proxy
-{-# INLINE withSingT #-}
 
 -- You can compare singletons based on their type rep. 
 (%==) :: SingKind ('KProxy :: KProxy k) => SingT (x :: k) -> SingT y -> DecEq x y 
@@ -171,6 +176,9 @@ instance SingKind ('KProxy :: KProxy Bool) where
   data SingWitness ('KProxy :: KProxy Bool) x args where 
     WFalse :: SingWitness 'KProxy 'False ( TyRepOf 'False )
     WTrue  :: SingWitness 'KProxy 'True  ( TyRepOf 'True  )
+
+  withSingW WFalse k = k Proxy 
+  withSingW WTrue  k = k Proxy 
 
   witness WTrue = (Refl, Dict)
   witness WFalse = (Refl, Dict) 
@@ -204,6 +212,10 @@ instance SingKind ('KProxy :: KProxy Ordering) where
     WLT  :: SingWitness 'KProxy 'LT ( TyRepOf 'LT )
     WEQ  :: SingWitness 'KProxy 'EQ ( TyRepOf 'EQ )
     WGT  :: SingWitness 'KProxy 'GT ( TyRepOf 'GT )
+
+  withSingW WLT k = k Proxy 
+  withSingW WEQ k = k Proxy 
+  withSingW WGT k = k Proxy 
 
   witness = \case { WLT -> (Refl, Dict); WEQ -> (Refl, Dict); WGT -> (Refl, Dict) } 
 {-
@@ -240,6 +252,8 @@ instance (SingKind ('KProxy :: KProxy a), SingKind ('KProxy :: KProxy b))
       WTup2 :: !(SingWitness 'KProxy va arep) -> !(SingWitness 'KProxy vb brep) -- ! means strict field, difference between lazy and strict fields; if you know the substructure is strict then the entire thing becomes strict 
                 -> SingWitness 'KProxy '((va :: a), (vb :: b)) ( 'TyCtr "(,)" '[ arep, brep ] )  
                     
+    withSingW (WTup2 x y) k = withSingW x $ \_ -> withSingW y $ \_ -> k Proxy 
+
     witness (WTup2 a b) = 
       case (witness a, witness b) of { ((Refl, Dict), (Refl, Dict)) -> (Refl, Dict) } -- pattenr match and return trivial proof, the compiler know the proofs, you can return refl or dict; witness proves single returns type representation coorresponding to the type inside of it 
 {-  
@@ -266,6 +280,9 @@ instance (SingKind ('KProxy :: KProxy k)) => SingKind ('KProxy :: KProxy [k]) wh
     WCons :: !(SingWitness 'KProxy x xrep)
                 -> !(SingWitness 'KProxy xs xsrep)
                 -> SingWitness 'KProxy ((x :: k) ': xs) ( 'TyCtr "[]_:" '[ xrep, xsrep ] )
+
+  withSingW WNil k = k Proxy 
+  withSingW (WCons x y) k = withSingW x $ \_ -> withSingW y $ \_ -> k Proxy 
 
   witness WNil = (Refl, Dict)
   witness (WCons a b) = 
@@ -307,6 +324,9 @@ instance (SingKind ('KProxy :: KProxy k)) => SingKind ('KProxy :: KProxy (Maybe 
     WJust :: !(SingWitness 'KProxy x xrep)
                 -> SingWitness 'KProxy ('Just x) ( 'TyCtr "Maybe_Just" '[ xrep ] )
 
+  withSingW WNothing k = k Proxy 
+  withSingW (WJust x) k = withSingW x $ \_ -> k Proxy 
+
   witness WNothing = (Refl, Dict) 
   witness (WJust a) = case witness a of { (Refl, Dict) -> (Refl, Dict) } 
 {-
@@ -336,6 +356,8 @@ instance (SingKind ('KProxy :: KProxy a), SingKind ('KProxy :: KProxy b))
 
     witness (WRecLabel a b) = case (witness a, witness b) of { ((Refl, Dict), (Refl, Dict)) -> (Refl, Dict) }
     
+    withSingW (WRecLabel x y) k = withSingW x $ \_ -> withSingW y $ \_ -> k Proxy 
+
     data SingWitness ('KProxy :: KProxy (RecLabel a b)) x args where 
       WRecLabel :: !(SingWitness 'KProxy va arep) -> !(SingWitness 'KProxy vb brep)
                 -> SingWitness 'KProxy ((va :: a) '::: (vb :: b)) ( 'TyCtr "RecLabel_:::" '[ arep, brep ] )
@@ -382,6 +404,8 @@ instance SingKind ('KProxy :: KProxy Symbol) where
   data SingWitness ('KProxy :: KProxy Symbol) x args where 
     WSymbol :: TL.KnownSymbol x => !(Proxy x) -> SingWitness 'KProxy x ( 'TyPrimSym x ) 
 
+  withSingW (WSymbol x) k = k x
+
   witness WSymbol{} = (Refl, Dict) 
 
   type ValOfSing ('KProxy :: KProxy Symbol) = String 
@@ -398,6 +422,8 @@ instance (TL.KnownSymbol a) => WitnessSingI a where witnessSing = WSymbol Proxy
 instance SingKind ('KProxy :: KProxy TL.Nat) where 
   data SingWitness ('KProxy :: KProxy TL.Nat) x args where 
     WNat :: TL.KnownNat x => !(Proxy x) -> SingWitness 'KProxy x ( 'TyPrimNat x ) 
+
+  withSingW (WNat x) k = k x 
 
   witness WNat{} = (Refl, Dict) 
 

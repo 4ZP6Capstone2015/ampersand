@@ -149,9 +149,9 @@ compareSymbol x y =
   let rf :: TL.CmpSymbol x y :~: TL.CmpSymbol x y 
       rf = Refl 
   in case compare (TL.symbolVal x) (TL.symbolVal y) of 
-       LT -> case safeCoerce rf :: TL.CmpSymbol x y :~: 'LT of { Refl -> SLT }
-       EQ -> case safeCoerce rf :: TL.CmpSymbol x y :~: 'EQ of { Refl -> SEQ }
-       GT -> case safeCoerce rf :: TL.CmpSymbol x y :~: 'GT of { Refl -> SGT }
+       LT -> case unsafeCoerce rf :: TL.CmpSymbol x y :~: 'LT of { Refl -> SLT }
+       EQ -> case unsafeCoerce rf :: TL.CmpSymbol x y :~: 'EQ of { Refl -> SEQ }
+       GT -> case unsafeCoerce rf :: TL.CmpSymbol x y :~: 'GT of { Refl -> SGT }
 
 type family RecAssocs (xs :: [RecLabel a b]) :: [b] where 
   RecAssocs '[] = '[] 
@@ -166,16 +166,37 @@ type family CaseOrdering (x :: Ordering) (a :: k) (b :: k) (c :: k) :: k where
   CaseOrdering 'EQ a b c = b 
   CaseOrdering 'GT a b c = c 
 
---
-decEq :: SingKind ('KProxy :: KProxy a) => SingT (x :: a) -> SingT (y :: a) -> SingT (x == y) 
-decEq x y = 
-  case x %== y of 
-    Yes Refl -> STrue 
-    No q     -> case neq_is_neq q of { Refl -> SFalse } 
 
+{-
 type family IsNotElem (xs :: [k]) (x :: k) :: Constraint where 
   IsNotElem '[] x = () 
   IsNotElem (x ': xs) y = ((x == y) ~ 'False, IsNotElem xs y)
+-} 
+
+-- A primitive inequality predicate which reduces. 
+class NotEqual (x :: k) (y :: k) where 
+  notEqual :: Not (x :~: y)
+
+instance Never => NotEqual x x where notEqual = case is_falsum of 
+instance NotEqual x y where notEqual = mapNeg (\x -> impossible assert "not equal" x) triviallyTrue
+
+neq_is_neq :: Not (x :~: y) -> Dict (NotEqual x y)
+neq_is_neq x = x `seq` unsafeCoerce (Dict :: Dict ())
+
+not_equal_does_not_reduce :: NotEqual a b => a :~: b -> () 
+not_equal_does_not_reduce Refl = () 
+
+-- The constraint which is never satisfied  
+type family Never' :: k where 
+  Never' = ('() :: ()) 
+type Never = (Never' :: Constraint)
+
+is_falsum :: Never => Void 
+is_falsum = impossible assert "is_falsum was called" () 
+
+type family IsNotElem (xs :: [k]) (x :: k) :: Constraint where 
+  IsNotElem '[] x = () 
+  IsNotElem (x ': xs) y = (NotEqual x y, IsNotElem xs y)
 
 type family IsSetRec_ (xs :: [RecLabel a b]) (seen :: [a]) :: Constraint where 
   IsSetRec_ '[] s = ()  
@@ -206,7 +227,9 @@ openSetRec = openSetRec_ where
  
   openNotElem :: forall qs q r . NotElem (qs :: [k]) (q :: k) -> (IsNotElem qs q => r) -> r 
   openNotElem NotElem_Nil k = k 
-  openNotElem (NotElem_Cons x xs) k = case neq_is_neq x of { Refl -> openNotElem xs k } 
+  openNotElem (NotElem_Cons x xs) k = 
+    case neq_is_neq x of { Dict -> 
+    openNotElem xs k }
 
 decNotElem :: (SingKind ('KProxy :: KProxy a)) => SingT (xs :: [a]) -> SingT (x :: a) -> Dec (NotElem xs x) 
 decNotElem (SingT WNil) _ = Yes NotElem_Nil 
@@ -214,9 +237,9 @@ decNotElem (SingT (WCons (x :: SingWitness 'KProxy x0 t0) (xs :: SingWitness 'KP
   case (decNotElem (SingT xs) e, SingT x %== e) of 
     (Yes p, No q) -> Yes (NotElem_Cons q p) 
     (No p, _) -> No (mapNeg (\case { NotElem_Cons _ q -> q ; a -> impossible assert "NotElem of (:) is not NotElem_Cons" a }) p) 
-    (_, Yes Refl) -> case triviallyFalse :: Not (() :~: Int) of 
-                       q -> No (mapNeg (\case { NotElem_Cons p _ -> case elimNeg p Refl of{}
-                                              ; a -> impossible assert "NotElem of (:) is not NotElem_Cons" a }) q)  
+    (_, Yes Refl) -> No $ mapNeg (\case { (NotElem_Cons p _) -> case elimNeg p Refl of{} 
+                                        ; a -> impossible assert "NotElem of (:) is not NotElem_Cons" a })
+                          triviallyTrue 
 
 decSetRec :: forall xs . (SingKind ('KProxy :: KProxy a)) => SingT (xs :: [RecLabel a b]) -> Dec (SetRec xs)
 decSetRec = go (SingT WNil) where 

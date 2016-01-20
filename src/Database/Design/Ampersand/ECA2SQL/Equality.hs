@@ -8,9 +8,8 @@ module Database.Design.Ampersand.ECA2SQL.Equality
   ( cong, cong2, cong3
   , Dict(..)
   , Exists(..), (#>>) 
-  , Not, elimNeg, triviallyFalse, triviallyTrue, mapNeg, notfalsum, notprim
-  , type (==), eq_is_eq, neq_is_neq, liftDec2
-  , Void, Dec(..), DecEq, mapDec, dec2bool 
+  , Not, elimNeg, triviallyTrue, mapNeg, doubleneg
+  , Void, Dec(..), DecEq, mapDec, dec2bool, liftDec2
   , module Data.Type.Equality
   , module GHC.Exts 
   , safeCoerce
@@ -20,6 +19,7 @@ import GHC.Exts (Constraint)
 import Data.Type.Equality ((:~:)(..))
 import Control.DeepSeq 
 import Unsafe.Coerce 
+import Database.Design.Ampersand.ECA2SQL.Trace 
 
 -- Manipulating equality proofs 
 cong :: f :~: g -> a :~: b -> f a :~: g b 
@@ -44,45 +44,30 @@ infixr 3 #>>
 (#>>) :: Exists p -> (forall x . p x -> r) -> r
 (#>>) (Ex x) f = f x
 
--- Type level equality. This allows us to (unsafely) derive
--- a decision procedure for (~). 
-type family (==) (a :: k) (b :: k) :: Bool where 
-  (==) a a = 'True 
-  (==) a b = 'False 
-
-triviallyFalse :: ((a == b) ~ 'False) => Not (a :~: b) 
-triviallyFalse = Not_ ( \case{} )
-
-triviallyTrue :: forall a b . ((a == b) ~ 'True) => a :~: b 
-triviallyTrue = safeCoerce (Refl :: a :~: a) -- TRUST ME 
-
-eq_is_eq :: (x == y) :~: 'True -> x :~: y 
-eq_is_eq Refl = triviallyTrue
-
-neq_is_neq :: Not (x :~: y) -> (x == y) :~: 'False
-neq_is_neq x = x `seq` safeCoerce Refl -- TRUST ME
-
 -- Strict negation. A value of type `Not p' is never inhabited by `\x ->
--- ... undefined ...'. If you have `x :: Not p' and `y :: p` then
+-- ... _|_ ...'. If you have `x :: Not p' and `y :: p` then
 -- you can be sure that `elimNot x p' is *really* a proof of `Void'. 
--- Since it is a newtype, it is also not inhabited by `undefined'.
+-- Since it is a newtype, it is also not inhabited by `_|_' itself. 
 
 newtype Not a = Not_ (a -> Void) 
 
+-- This is valid only if the interface doesn't violate the assumed 
+-- semantics
+instance NFData (Not a) where 
+  rnf (Not_ f) = f `seq` () 
+
+doubleneg :: NFData a => a -> Not (Not a)
+doubleneg x = x `deepseq` Not_ $ \y -> elimNeg y x 
+
 -- primitive constructor of negation without any unsafecoerce
-notprim :: (a ~ b) => Not (Not (a :~: b))
-notprim = Not_ $ \(Not_ x) -> x Refl 
+triviallyTrue :: Not (Not ())
+triviallyTrue = doubleneg ()  
 
--- Given a proof of false, we can derive any proof.  Semantically this is the
--- same as `absurd' but operationally it is not. 
-notfalsum :: NFData a => Void -> Not a 
-notfalsum v = Not_ (\x -> rnf x `seq` v)   
+mapNeg :: (NFData a, NFData b) => (b -> a) -> Not a -> Not b 
+mapNeg f (Not_ q) = Not_ (\x -> q $!! (f $!! x)) 
 
-mapNeg :: NFData b => (b -> a) -> Not a -> Not b 
-mapNeg f (Not_ q) = Not_ (\x -> q (f $!! x)) 
-
-elimNeg :: Not a -> a -> Void 
-elimNeg (Not_ f) a = f a
+elimNeg :: NFData a => Not a -> a -> Void 
+elimNeg (Not_ f) a = f $!! a
 
 -- "Real" decidable equality. 
 data Void 
@@ -115,5 +100,5 @@ dec2bool = \case { Yes{} -> True; No{} -> False }
 
 
 -- for debugging  
-safeCoerce :: a -> b
-safeCoerce x = error "unsafeCoerce"
+safeCoerce :: String -> a -> b
+safeCoerce str _ = error $ "unsafeCoerce:" ++ str

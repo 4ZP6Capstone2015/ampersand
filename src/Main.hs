@@ -37,8 +37,9 @@ main =
 
 
 
-
--- -I ../ampersand-models/Examples/ProjectAdministration -o ../ampersand-models/Examples/ProjectAdministration ProjectAdministration.adl --print-eca-info
+{-
+:main -I ../ampersand-models/Examples/ProjectAdministration -o ../ampersand-models/Examples/ProjectAdministration ProjectAdministration.adl --print-eca-info
+-}
 printECAInfoFSPec :: FSpec -> IO ()  
 printECAInfoFSPec fSpec@FSpec{..} = do
   let opts = getOpts 
