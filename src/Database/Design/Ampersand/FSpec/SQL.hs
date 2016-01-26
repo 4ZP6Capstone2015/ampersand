@@ -624,7 +624,8 @@ toTableRef = TRQueryExpr . toSQL
 selectDeclaration :: FSpec -> Declaration -> BinQueryExpr
 selectDeclaration fSpec dcl =
   case dcl of
-    Sgn{}  -> leafCode (getDeclarationTableInfo fSpec dcl)
+    Sgn{}  ->
+      if "Delta" == decnm dcl then deltaBSE $ decsgn dcl else leafCode (getDeclarationTableInfo fSpec dcl)
     Isn{}  -> let (plug, c) = getConceptTableInfo fSpec (detyp dcl)
               in leafCode (plug, c, c)
     Vs sgn
@@ -641,6 +642,14 @@ selectDeclaration fSpec dcl =
                      , bseWhr = Just (conjunctSQL (map notNull [src,trg]))
                      }
    where
+     deltaBSE :: Signature -> BinQueryExpr 
+     deltaBSE (Sign src tgt) = BSE  
+       { bseSrc = Iden [ QName "delta_src" ] 
+       , bseTrg = Iden [ QName "delta_tgt" ] 
+       , bseTbl = [ TRSimple [ QName $ "delta_" ++ name src ++ "_" ++ name tgt ] ] 
+       , bseWhr = Nothing 
+       } 
+
      leafCode :: (PlugSQL,SqlAttribute,SqlAttribute) -> BinQueryExpr
      leafCode (plug,s,t) 
          = BSE { bseSrc = Iden [QName (name s)]

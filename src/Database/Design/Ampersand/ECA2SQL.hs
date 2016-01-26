@@ -74,27 +74,28 @@ eca2SQL fSpec@FSpec{plugInfos} (ECA _ delta action _) =
         --   , objmsub = Nothing, objstrs = [], objmView = Nothing 
         --   }
         -- deltaPlug = makeUserDefinedSqlPlug originalContext deltaObj
-        deltaPlug = BinSQL 
-          { sqlname = name delta 
-          , columns = ( Att { attName = "src" 
-                            , attExpr = EDcD delta    
-                            , attType = SQLVarchar 255 
-                            , attUse  = PlainAttr
-                            , attNull = True
-                            , attUniq = True }
-                      , Att { attName = "tgt" 
-                            , attExpr = EDcD delta    
-                            , attType = SQLVarchar 255 
-                            , attUse  = PlainAttr
-                            , attNull = True
-                            , attUniq = True }
-                      )
-          , cLkpTbl = [] --  ??? [(A_Concept, SqlAttribute)]
-          , mLkp = EDcD delta -- :: Expression
-          }
+        -- deltaPlug = BinSQL 
+        --   { sqlname = name delta 
+        --   , columns = ( Att { attName = "src" 
+        --                     , attExpr = EDcD delta    
+        --                     , attType = SQLVarchar 255 
+        --                     , attUse  = PlainAttr
+        --                     , attNull = True
+        --                     , attUniq = True }
+        --               , Att { attName = "tgt" 
+        --                     , attExpr = EDcD delta    
+        --                     , attType = SQLVarchar 255 
+        --                     , attUse  = PlainAttr
+        --                     , attNull = True
+        --                     , attUniq = True }
+        --               )
+        --   , cLkpTbl = [] --  ??? [(A_Concept, SqlAttribute)]
+        --   , mLkp = EDcD delta -- :: Expression
+        --   }
 
-        fSpec' = fSpec { plugInfos = InternalPlug deltaPlug : plugInfos } 
-        expr2SQL' = expr2SQL fSpec'             -- calling expr2SQL function from SQL.hs
+        -- fSpec' = fSpec { plugInfos = InternalPlug deltaPlug : plugInfos } 
+
+        expr2SQL' = expr2SQL fSpec              -- calling expr2SQL function from SQL.hs
                                                 -- returns a QueryExpr (for a select query)  
   
         done = \r -> SetRef r T.true  
