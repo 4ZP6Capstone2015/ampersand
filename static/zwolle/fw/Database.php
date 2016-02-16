@@ -37,6 +37,32 @@ class Database {
 		}
 	}
 	
+	private function installECAs () { 
+		global $allECASQLFuns;
+		foreach ($allECASQLFuns as $ecaID=>$ecaSQL) {
+            
+            $result = $this->db_link->query($ecaSQL);
+            Notifications::addLog('INSTALLING ECA $ecaID', 'DATABASE');
+
+            if ($this->db_link->error) { 
+                Notifications::addLog("MYSQL error " . $this->db_link->errno . ": " . $this->db_link->error . 'when installing ECA $ecaID', 'DATABASE');
+            }
+        }
+	}	
+
+    // TODO: 
+    // This function should take a variable amount of arguments
+    // If the relation correspond to the ECA is I[A] for some A then
+    //   callECA( a_Id, a_field0, a_field1 ... a_fieldn )
+    // otherwise, if the relation is V[A,B] then 
+    //   callECA( a_Id, b_Id )
+    // It constructs a query from the given arguments 
+    // and makes a SQL query like `CALL ecaRule{k} ( arg0, arg1 .. argn )`
+    // And does some error handling? Where do errors occur. 
+    public function callECA() { 
+
+    }
+
 	// Prevent any copy of this object
 	private function __clone(){
 		
