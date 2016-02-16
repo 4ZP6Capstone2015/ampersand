@@ -15,6 +15,7 @@ import Database.Design.Ampersand.FSpec.FSpecAux
 import Database.Design.Ampersand.Prototype.ProtoUtil
 import Database.Design.Ampersand.Basics (fatal)
 import Database.Design.Ampersand.Prototype.PHP (getTableName, signalTableSpec)
+import Database.Design.Ampersand.ECA2SQL.PrettyPrinterSQL (eca2PrettySQL)
 
 -- Generate Generics.php
 generateGenerics :: FSpec -> IO ()
@@ -26,14 +27,14 @@ generateGenerics fSpec =
  where    
     genericsPhpContent :: [String]
     genericsPhpContent =
-      intercalate [""]
-        [ generateConstants fSpec
-        , generateTableInfos fSpec
-        --, generateRules fSpec
-        , generateConjuncts fSpec
-        , generateRoles fSpec
-        , generateViews fSpec
-        , generateInterfaces fSpec
+      intercalate [""] $ map ($fSpec) 
+        [ generateConstants 
+        , generateTableInfos 
+        , generateConjuncts 
+        , generateECASQL 
+        , generateRoles 
+        , generateViews 
+        , generateInterfaces 
         ]
         
 generateConstants :: FSpec -> [String]
@@ -309,6 +310,18 @@ generateConjuncts fSpec =
          , let violExpr = notCpl rExpr
          , let violationsExpr = conjNF (getOpts fSpec) violExpr
          ]
+     ) )
+
+
+generateECASQL :: FSpec -> [String]
+generateECASQL fSpec@FSpec{vEcas=vEcas} =
+  [ "$allECASQLFuns ="
+  , "  array"
+  ] ++
+  addToLastLine ";"
+     (indent 4
+       (blockParenthesize  "(" ")" "," $ map pure 
+         [ (showPhpStr (show $ ecaNum eca)) ++ " => " ++ show (eca2PrettySQL fSpec eca) ++ " */" | eca <- vEcas ]
      ) )
 
 -- Because the signal/invariant condition appears both in generateConjuncts and generateInterface, we use
