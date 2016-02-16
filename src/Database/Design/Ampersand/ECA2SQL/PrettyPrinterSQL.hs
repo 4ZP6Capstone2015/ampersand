@@ -82,7 +82,11 @@ prettyRec (Delete tableSpec_ from) = retUnit $ foldl1 (<>)
 prettyRec (IfSQL cnd t0 t1) = 
   case prettyRec t0 of { (ppr_t0, _val_t0) -> 
   case prettyRec t1 of { (ppr_t1, _val_t1) -> retUnit $ 
-    text "SELECT IF" <> lparen <> (ifSQLfun cnd) <> text "," <> ppr_t0 <> text "," <> ppr_t1 <> rparen
+    text "IF" <> lparen <> showSQLVal cnd <> rparen <> text "THEN" <> line  
+     <> hang 4 (ppr_t0 <> line)
+     <> text "ELSE" 
+     <> hang 4 (ppr_t1 <> line) 
+    -- text "SELECT IF" <> lparen <> (showSQLVal cnd) <> text "," <> ppr_t0 <> text "," <> ppr_t1 <> rparen
   }}                         
 
 prettyRec (Update tb to arg) = retUnit $ 
@@ -126,8 +130,8 @@ prettySQLFromClause = prettySQLAtoB
 
 
 
-ifSQLfun :: SQLVal 'SQLBool -> Doc
-ifSQLfun = error "TODO"
+-- ifSQLfun :: SQLVal 'SQLBool -> Doc
+-- ifSQLfun = error "TODO"
 
 -- testing () = failure 
 --[TODO PART BELOW]
