@@ -2,7 +2,9 @@ module Database.Design.Ampersand.FSpec.SQL
   ( prettySQLQuery, expr2SQL )
   
 where
-import Language.SQL.SimpleSQL.Syntax
+import Language.SQL.SimpleSQL.Syntax hiding (Name(Name), ValueExpr(StringLit))
+import Language.SQL.SimpleSQL.Syntax (Name(), ValueExpr())
+import qualified Language.SQL.SimpleSQL.Syntax as Sm 
 import Language.SQL.SimpleSQL.Pretty
 import Database.Design.Ampersand.Basics
 import Database.Design.Ampersand.Classes.ConceptStructure
@@ -29,6 +31,19 @@ instance SQLAble Expression where
 instance SQLAble Declaration where
   prettySQLQuery = makeANice . selectDeclaration
   
+pattern QName :: String -> Name 
+pattern QName n = Sm.Name (Just ("\"", "\"")) n 
+
+-- I Think?
+pattern UQName :: String -> Name 
+pattern UQName n = Sm.Name (Just ("`", "`")) n 
+
+pattern Name :: String -> Name 
+pattern Name n = Sm.Name Nothing n 
+
+pattern StringLit :: String -> ValueExpr
+pattern StringLit x = Sm.StringLit "\"" "\"" x
+
 expr2SQL :: FSpec -> Expression -> QueryExpr 
 expr2SQL fs e = toSQL $ selectExpr fs e
 

@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE DeriveDataTypeable, ViewPatterns, PatternSynonyms #-}
 {- The purpose of class Unique is to identify a Haskell object by means of a string.
 E.g.
 instance Unique Pattern where
@@ -6,14 +6,19 @@ instance Unique Pattern where
 -}
 
 module Database.Design.Ampersand.Basics.Unique 
-  (Unique(..),Named(..))
+  (Unique(..),Named(..), pattern MySQL)
 where
 import Data.Typeable
 import Data.List
 import Data.Char
 import Database.Design.Ampersand.Basics.Version
 import Language.SQL.SimpleSQL.Syntax (Name(..), ValueExpr(..), Dialect(..))
+import qualified Language.SQL.SimpleSQL.Syntax as Sm 
 import Language.SQL.SimpleSQL.Pretty (prettyValueExpr)
+
+pattern MySQL :: Dialect 
+pattern MySQL <- ((== Sm.mysql) -> True)
+  where MySQL = Sm.mysql
 
 -- | anything could have some label, can't it?
 class Named a where

@@ -38,7 +38,7 @@ decl2TableSpec fSpec decl =
                    in (p,name a, freshName (name a) 1)
                     
           Vs{}  -> error "decl2TableSpec: V[_,_] not expected here"
-  in tableSpec' (Name $ name plug) ((K src :*: SingT WSQLAtom) :> (K tgt :*: SingT WSQLAtom) :> PNil) $ \case 
+  in tableSpec' (Name Nothing $ name plug) ((K src :*: SingT WSQLAtom) :> (K tgt :*: SingT WSQLAtom) :> PNil) $ \case 
        Just (Refl,tb) -> TableAlias_ (sing :: SingT '[ "src", "tgt" ]) tb 
        Nothing -> error $ "decl2TableSpec: declaration did not produce unique table spec:\n" 
                     ++ show (src, tgt) 
@@ -53,7 +53,7 @@ decl2TableSpec fSpec decl =
 -- TODO: Add the motives in comments to the generated code 
 
 eca2SQL :: FSpec -> ECArule -> SQLMethod '[] 'SQLBool
-eca2SQL fSpec@FSpec{plugInfos} (ECA _ delta action _) =  
+eca2SQL fSpec@FSpec{plugInfos=_plugInfos} (ECA _ delta action _) =  
   MkSQLMethod sing $ \PNil -> 
     NewRef sing (Just "checkDone") (Just T.false) :>>= \checkDone -> 
     paClause2SQL action checkDone :>>= \_ -> 

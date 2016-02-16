@@ -4,7 +4,7 @@
 module Database.Design.Ampersand.ECA2SQL.PrettyPrinterSQL (eca2PrettySQL) where
 
 import Text.PrettyPrint.Leijen hiding ((<$>)) 
-import Language.SQL.SimpleSQL.Syntax
+import Language.SQL.SimpleSQL.Syntax hiding (Statement(..))
 import Language.SQL.SimpleSQL.Pretty
 import Database.Design.Ampersand.ECA2SQL.TypedSQL -- hiding (PAclause(Ref))
 import Database.Design.Ampersand.ECA2SQL.Singletons
@@ -82,10 +82,12 @@ prettyRec (Delete tableSpec_ from) = retUnit $ foldl1 (<>)
 prettyRec (IfSQL cnd t0 t1) = 
   case prettyRec t0 of { (ppr_t0, _val_t0) -> 
   case prettyRec t1 of { (ppr_t1, _val_t1) -> retUnit $ 
-    text "IF" <> lparen <> showSQLVal cnd <> rparen <> text "THEN" <> line  
-     <> hang 4 (ppr_t0 <> line)
-     <> text "ELSE" 
-     <> hang 4 (ppr_t1 <> line) 
+    vsep                          
+      [ text "IF" <> lparen <> showSQLVal cnd <> rparen <> text "THEN"   
+      , indent 4 (ppr_t0 <> text ";")
+      , indent (-4) (text "ELSE") 
+      , indent 4 ppr_t1 
+      ] 
     -- text "SELECT IF" <> lparen <> (showSQLVal cnd) <> text "," <> ppr_t0 <> text "," <> ppr_t1 <> rparen
   }}                         
 
@@ -100,7 +102,7 @@ prettyRec (DropTable tb) = retUnit $ text "DROP TABLE" <> (showTableSpec tb)
 
 prettyRec (NewRef refTy mbRefNm mbRefVal) = 
   let refNm = maybe "ref" id mbRefNm
-      refNmSem = unsafeRefFromName refTy $ Name refNm
+      refNmSem = unsafeRefFromName refTy $ Name Nothing refNm
   in ( text "SET @" <> text refNm <+> ":=" <+> maybe "NULL" pretty mbRefVal
      , refNmSem
      )
@@ -111,8 +113,8 @@ prettyRec (SQLRet x) = ("RETURN" <+> pretty x,Val x)
 prettyRec _ = error "prettyRec: not yet supported" 
 
 instance Pretty (SQLVal a) where 
-  pretty (SQLScalarVal x) = text $ prettyValueExpr theDialect x
-  pretty (SQLQueryVal x) = text $ prettyQueryExpr theDialect x
+  pretty (SQLScalarVal x) = prettyValueExprDoc theDialect x
+  pretty (SQLQueryVal x) = prettyQueryExprDoc theDialect x
 
 showSQLVal :: SQLVal a -> Doc
 showSQLVal = pretty 
@@ -147,8 +149,8 @@ prettySQLToClause f g = prettySQLAtoB f <> text "TO" <> prettySQLAtoB g
 prettySQLAtoB :: forall a b . Sing a => (SQLVal a -> SQLVal b) -> Doc
 prettySQLAtoB fn = 
   let inp = elimSingT (isScalarType (sing :: SingT a)) $ \case 
-              WTrue  -> SQLScalarVal $ Iden [Name "Unique"]
-              WFalse -> SQLQueryVal $ Table [Name "Unique"]
+              WTrue  -> SQLScalarVal $ Iden [Name Nothing "Unique"]
+              WFalse -> SQLQueryVal $ Table [Name Nothing "Unique"]
       inp :: SQLVal a 
   in showSQLVal $ fn inp 
 
@@ -157,4 +159,4 @@ prettySQLAtoB fn =
 getName x = prettyValueExpr theDialect $ Iden [x]
 
 theDialect :: Dialect 
-theDialect = MySQL
+theDialect = mysql

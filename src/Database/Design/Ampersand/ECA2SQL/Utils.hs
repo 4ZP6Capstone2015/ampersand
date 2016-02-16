@@ -29,7 +29,7 @@ import Database.Design.Ampersand.ECA2SQL.Singletons
 import Database.Design.Ampersand.ECA2SQL.Trace 
 import Control.DeepSeq
 
-instance IsString Name where fromString = Name 
+instance IsString Name where fromString = Name Nothing 
 
 -- Given a functor `f', `Prod f' constructs the n-ary product category of `f'
 data Prod (f :: k -> *) (xs :: [k]) where 

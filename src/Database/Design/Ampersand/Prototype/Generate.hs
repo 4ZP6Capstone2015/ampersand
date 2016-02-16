@@ -321,7 +321,7 @@ generateECASQL fSpec@FSpec{vEcas=vEcas} =
   addToLastLine ";"
      (indent 4
        (blockParenthesize  "(" ")" "," $ map pure 
-         [ (showPhpStr (show $ ecaNum eca)) ++ " => " ++ show (eca2PrettySQL fSpec eca) ++ " */" | eca <- vEcas ]
+         [ (showPhpStr (show $ ecaNum eca)) ++ " => '" ++ show (eca2PrettySQL fSpec eca) ++ "'" | eca <- vEcas ]
      ) )
 
 -- Because the signal/invariant condition appears both in generateConjuncts and generateInterface, we use

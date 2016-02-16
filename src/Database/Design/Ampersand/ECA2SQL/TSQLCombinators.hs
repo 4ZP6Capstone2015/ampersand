@@ -36,7 +36,7 @@ instance IndexInto ('SQLRow xs) ('KProxy :: KProxy Symbol) where
   type GetAtIndex ('SQLRow xs) (nm :: Symbol) = LookupRec xs nm 
 
   (!) v@(SQLQueryVal x) i@(SSymbol pri) = 
-    let strNm = Sm.Name $ TL.symbolVal pri in 
+    let strNm = Sm.Name Nothing $ TL.symbolVal pri in 
     case typeOf v of { t -> 
     case lookupRec (colsOf t) i of { r -> 
     withSingT r $ \_ ->  
