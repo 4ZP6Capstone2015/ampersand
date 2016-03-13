@@ -1,6 +1,7 @@
 {-# LANGUAGE ImplicitParams #-}
 -- | This module contains Version of Ampersand
-module Database.Design.Ampersand.Basics.Version (ampersandVersionStr, ampersandVersionWithoutBuildTimeStr, fatal) where
+module Database.Design.Ampersand.Basics.Version 
+  (ampersandVersionStr, ampersandVersionWithoutBuildTimeStr, fatal) where
 import GHC.Stack
 import GHC.SrcLoc
 import Database.Design.Ampersand.Basics.BuildInfo_Generated

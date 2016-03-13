@@ -9,7 +9,7 @@ module Database.Design.Ampersand.ECA2SQL.TSQLCombinators
 import Database.Design.Ampersand.ECA2SQL.TypedSQL hiding (In)  
 import Database.Design.Ampersand.ECA2SQL.Utils hiding (Not)
 import Database.Design.Ampersand.ECA2SQL.Singletons 
-import Database.Design.Ampersand.ECA2SQL.Trace 
+import Database.Design.Ampersand.Basics.Assertion
 import qualified Language.SQL.SimpleSQL.Syntax as Sm 
 import Prelude (Maybe(..), (.), id, seq, undefined, ($), Bool(..), String, (++)) -- This module is intended to be imported qualified
 import Control.Applicative (Applicative(..), (<$>))
@@ -55,7 +55,7 @@ instance IndexInto ('SQLRow xs) ('KProxy :: KProxy Symbol) where
                    , qeFrom          = [ Sm.TRQueryExpr x ]
                    } 
      }}
-  (!) x y = impossible assert "" (x `seq` y `seq` ())
+  (!) x y = impossible  "" (x `seq` y `seq` ())
 
 instance IndexInto ('SQLRel ('SQLRow xs)) ('KProxy :: KProxy Symbol) where 
   type GetAtIndex ('SQLRel ('SQLRow xs)) (nm :: Symbol) = 'SQLRel (LookupRec xs nm)

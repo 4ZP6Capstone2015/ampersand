@@ -23,6 +23,7 @@ import Database.Design.Ampersand.Basics (Named(..))
 import Database.Design.Ampersand.Core.ParseTree (makePSingleton)
 import Database.Design.Ampersand.ECA2SQL.Utils  
 import Database.Design.Ampersand.ECA2SQL.TypedSQL 
+import Database.Design.Ampersand.Basics.Assertion
 import qualified Database.Design.Ampersand.ECA2SQL.TSQLCombinators as T 
 import qualified GHC.TypeLits as TL 
 import Database.Design.Ampersand.ECA2SQL.Singletons
@@ -46,8 +47,6 @@ decl2TableSpec = undefined
 --        Just (Refl,tb) -> TableAlias_ (sing :: SingT '[ "src", "tgt" ]) tb 
 --        Nothing -> error $ "decl2TableSpec: declaration did not produce unique table spec:\n" 
 --                     ++ show (src, tgt) 
-
-
 
 -- TODO: This function could do with some comments 
 -- TODO: Test eca2SQL

@@ -26,7 +26,7 @@ import qualified GHC.Exts as Exts
 import Language.SQL.SimpleSQL.Syntax (Name(..))
 import Database.Design.Ampersand.ECA2SQL.Equality 
 import Database.Design.Ampersand.ECA2SQL.Singletons
-import Database.Design.Ampersand.ECA2SQL.Trace 
+import Database.Design.Ampersand.Basics.Assertion
 import Control.DeepSeq
 
 instance IsString Name where fromString = Name Nothing 
@@ -127,7 +127,7 @@ type family (&&) (x :: Bool) (y :: Bool) :: Bool where
 SFalse |&& _ = SFalse 
 _ |&& SFalse = SFalse 
 STrue |&& STrue = STrue 
-x |&& y = impossible assert "Bool not {T,F}" (x `seq` y `seq` () )
+x |&& y = impossible  "Bool not {T,F}" (x `seq` y `seq` () )
 
 type family And (xs :: [Bool]) :: Bool where 
   And '[] = 'True 
@@ -178,7 +178,7 @@ class NotEqual (x :: k) (y :: k) where
   notEqual :: Not (x :~: y)
 
 instance Never => NotEqual x x where notEqual = case is_falsum of 
-instance NotEqual x y where notEqual = mapNeg (\x -> impossible assert "not equal" x) triviallyTrue
+instance NotEqual x y where notEqual = mapNeg (\x -> impossible  "not equal" x) triviallyTrue
 
 neq_is_neq :: Not (x :~: y) -> Dict (NotEqual x y)
 neq_is_neq x = x `seq` unsafeCoerce (Dict :: Dict ())
@@ -192,7 +192,7 @@ type family Never' :: k where
 type Never = (Never' :: Constraint)
 
 is_falsum :: Never => Void 
-is_falsum = impossible assert "is_falsum was called" () 
+is_falsum = impossible  "is_falsum was called" () 
 
 type family IsNotElem (xs :: [k]) (x :: k) :: Constraint where 
   IsNotElem '[] x = () 
@@ -236,9 +236,9 @@ decNotElem (SingT WNil) _ = Yes NotElem_Nil
 decNotElem (SingT (WCons (x :: SingWitness 'KProxy x0 t0) (xs :: SingWitness 'KProxy xs0 ts0))) e = 
   case (decNotElem (SingT xs) e, SingT x %== e) of 
     (Yes p, No q) -> Yes (NotElem_Cons q p) 
-    (No p, _) -> No (mapNeg (\case { NotElem_Cons _ q -> q ; a -> impossible assert "NotElem of (:) is not NotElem_Cons" a }) p) 
+    (No p, _) -> No (mapNeg (\case { NotElem_Cons _ q -> q ; a -> impossible  "NotElem of (:) is not NotElem_Cons" a }) p) 
     (_, Yes Refl) -> No $ mapNeg (\case { (NotElem_Cons p _) -> case elimNeg p Refl of{} 
-                                        ; a -> impossible assert "NotElem of (:) is not NotElem_Cons" a })
+                                        ; a -> impossible  "NotElem of (:) is not NotElem_Cons" a })
                           triviallyTrue 
 
 decSetRec :: forall xs . (SingKind ('KProxy :: KProxy a)) => SingT (xs :: [RecLabel a b]) -> Dec (SetRec xs)
@@ -249,9 +249,9 @@ decSetRec = go (SingT WNil) where
     case (decNotElem seen (SingT wnm), go (SingT (WCons wnm seen')) (SingT xs)) of 
       (Yes p, Yes q) -> Yes (SetRec_Cons p q) 
       (No p, _) -> No (mapNeg (\case { SetRec_Cons x0 _ -> x0
-                                     ; a -> impossible assert "SetRec of a (:) is not SetRec_Cons" (a `seq` ()) }) p) 
+                                     ; a -> impossible  "SetRec of a (:) is not SetRec_Cons" (a `seq` ()) }) p) 
       (_, No p) -> No (mapNeg (\case { SetRec_Cons _ x0 -> x0
-                                     ; a -> impossible assert "SetRec of a (:) is not SetRec_Cons" (a `seq` ()) }) p) 
+                                     ; a -> impossible  "SetRec of a (:) is not SetRec_Cons" (a `seq` ()) }) p) 
 
 type family IsJust (x :: Maybe k) :: k where 
   IsJust ('Just x) = x 
@@ -285,7 +285,7 @@ lookupRec :: forall (xs :: [RecLabel Symbol b]) (nm :: Symbol) (r :: b) . (Looku
 lookupRec row nm = 
   elimSingT (lookupRecM row nm) $ \case 
     WJust r -> SingT r 
-    WNothing -> impossible assert "LookupRec exists but is not Just" () 
+    WNothing -> impossible  "LookupRec exists but is not Just" () 
 
 
 -- records to/from lists 

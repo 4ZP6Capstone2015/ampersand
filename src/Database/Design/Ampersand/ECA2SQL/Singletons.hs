@@ -15,7 +15,7 @@ import Data.Proxy (Proxy(..), KProxy(..))
 import GHC.TypeLits (Symbol, symbolVal, sameSymbol, KnownSymbol)
 import qualified GHC.TypeLits as TL  
 import Database.Design.Ampersand.ECA2SQL.Equality 
-import Database.Design.Ampersand.ECA2SQL.Trace 
+import Database.Design.Ampersand.Basics.Assertion
 import Numeric.Natural
 import Control.DeepSeq
 
@@ -107,7 +107,7 @@ eqSymbol :: (TL.KnownSymbol x, TL.KnownSymbol y) => Proxy x -> Proxy y -> DecEq 
 eqSymbol x y = 
   case TL.sameSymbol x y of 
     Just a  -> Yes a
-    Nothing -> No $ mapNeg (\case { Refl -> impossible assert "eqSymbol" () }) triviallyTrue
+    Nothing -> No $ mapNeg (\case { Refl -> impossible "eqSymbol" () }) triviallyTrue
 
 eqProdTypRep :: TyRepSing (xs :: [TyRep]) -> TyRepSing ys -> DecEq xs ys 
 eqProdTypRep STyNil STyNil = Yes Refl
@@ -125,7 +125,7 @@ eqTyRep :: TyRepSing (x :: TyRep) -> TyRepSing y -> DecEq x y
 eqTyRep (STyNat n0) (STyNat n1) =
   case TL.sameNat n0 n1 of 
     Just Refl -> Yes Refl
-    Nothing   -> No $ mapNeg (\case { Refl -> impossible assert "eqTyRep:TyNat" () }) triviallyTrue
+    Nothing   -> No $ mapNeg (\case { Refl -> impossible "eqTyRep:TyNat" () }) triviallyTrue
 
 eqTyRep (STySym n0) (STySym n1) = mapDec (cong Refl) (mapNeg (\case {Refl -> Refl})) $ eqSymbol n0 n1 
 
@@ -431,7 +431,7 @@ instance SingKind ('KProxy :: KProxy TL.Nat) where
   sing2val' (WNat x) = fromIntegral $ TL.natVal x 
   val2sing' _ n k = case TL.someNatVal (fromIntegral n) of 
                      Just (TL.SomeNat x) -> k (WNat x)
-                     Nothing -> impossible assert "negative natural number" () 
+                     Nothing -> impossible "negative natural number" () 
 
 pattern SNat x = SingT (WNat x) 
 

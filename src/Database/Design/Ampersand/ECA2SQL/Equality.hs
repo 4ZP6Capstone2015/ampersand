@@ -19,7 +19,7 @@ import GHC.Exts (Constraint)
 import Data.Type.Equality ((:~:)(..))
 import Control.DeepSeq 
 import Unsafe.Coerce 
-import Database.Design.Ampersand.ECA2SQL.Trace 
+import Database.Design.Ampersand.Basics.Assertion
 
 -- Manipulating equality proofs 
 cong :: f :~: g -> a :~: b -> f a :~: g b 
