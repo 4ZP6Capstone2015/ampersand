@@ -33,7 +33,18 @@ import Database.Design.Ampersand.ECA2SQL.Singletons
 decl2TableSpec :: FSpec -> Declaration 
                -> (forall k i j . TableSpec k -> i `Elem` k -> j `Elem` k -> r) 
                -> r 
-decl2TableSpec = undefined
+decl2TableSpec fSpec decl k = 
+  case getDeclarationTableInfo fSpec decl of 
+    (plug, srcAtt, tgtAtt) -> 
+      case plug of 
+        TblSQL{} -> undefined
+        BinSQL{} -> undefined
+        ScalarSQL{} -> impossible "ScalarSQL unexecpted here" () 
+
+
+mkInsDelAtom :: FSpec -> Declaration -> Ins ->  
+
+-- (forall tbl i j . TableSpec tbl -> i `Elem` tbl -> j `Elem` tbl -> 
 
 -- decl2TableSpec fSpec decl = 
 --   let (plug,src,tgt) = 
