@@ -337,6 +337,9 @@ Test-Suite ampersand-test
   main-is:           Test.hs
   hs-source-dirs:    src
   default-language:  Haskell2010
+  default-extensions:NamedFieldPuns, RecordWildCards, LambdaCase, PatternSynonyms, EmptyCase, PolyKinds, DataKinds, DefaultSignatures,
+                     GADTs, ConstraintKinds, TypeFamilies, RankNTypes, FlexibleContexts, FlexibleInstances, MultiParamTypeClasses
+                     FunctionalDependencies, TypeOperators
   ghc-options:       -fhpc -with-rtsopts=-M1536m -Wall
   build-depends:     base >= 4.7 && < 5.0,
                      bytestring == 0.10.*,
