@@ -28,6 +28,9 @@ testval0 = sing :: SingT '( 'Just 10, '[ "x", "y" ] )
 withSingT :: forall (x :: k) r . (SingKind ('KProxy :: KProxy k)) => SingT x -> (Sing x => Proxy x -> r) -> r
 withSingT (SingT a) k = withSingW a k
 
+singFromProxy :: Sing x => Proxy x -> SingT x 
+singFromProxy Proxy = sing 
+
 data TyRep = TyCtr Symbol [TyRep] 
            | TyPrimNat TL.Nat  -- represents types by constructure and list of arguments; Natural numbers and strings of type level, use type level strings to label tables; Nat = natural numbers
            | TyPrimSym TL.Symbol -- Sym = Symbol, type literals, strings; GHCI supports literals and comparisons associated with those literals

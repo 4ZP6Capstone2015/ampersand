@@ -1,5 +1,5 @@
 {-# LANGUAGE PatternSynonyms, NoMonomorphismRestriction, OverloadedStrings, LambdaCase, RoleAnnotations, LiberalTypeSynonyms #-} 
-{-# LANGUAGE ScopedTypeVariables #-} 
+{-# LANGUAGE ScopedTypeVariables, ViewPatterns #-} 
 {-# OPTIONS -fno-warn-unticked-promoted-constructors #-} 
 
 module Database.Design.Ampersand.ECA2SQL 
@@ -24,6 +24,7 @@ import Database.Design.Ampersand.Core.ParseTree (makePSingleton)
 import Database.Design.Ampersand.ECA2SQL.Utils  
 import Database.Design.Ampersand.ECA2SQL.TypedSQL 
 import Database.Design.Ampersand.Basics.Assertion
+import Database.Design.Ampersand.Basics.Version 
 import qualified Database.Design.Ampersand.ECA2SQL.TSQLCombinators as T 
 import qualified GHC.TypeLits as TL 
 import Database.Design.Ampersand.ECA2SQL.Singletons
@@ -42,7 +43,45 @@ decl2TableSpec fSpec decl k =
         ScalarSQL{} -> impossible "ScalarSQL unexecpted here" () 
 
 
-mkInsDelAtom :: FSpec -> Declaration -> Ins ->  
+unsafeMkInsDelAtom :: FSpec -> Declaration -> InsDel -> Expression -> SQLStatement 'SQLUnit 
+unsafeMkInsDelAtom fSpec decl act toInsDel =
+  case getDeclarationTableInfo fSpec decl of 
+    (plug, srcAtt, tgtAtt) ->  
+      case plug of 
+        TblSQL{} -> fatal 0 "TblSQL currently unsupported in ECA2SQL" 
+        BinSQL{} -> 
+          case someTableSpec (fromString $ sqlname plug) 
+                 [ (fromString $ attName srcAtt, Ex (sing :: SQLTypeS 'SQLAtom)) 
+                 , (fromString $ attName tgtAtt, Ex (sing :: SQLTypeS 'SQLAtom)) 
+                 ] of 
+            Nothing -> fatal 0 $ unwords 
+                        [ "Could not construct table spec from attributes\n", 
+                        show srcAtt, " and ", show tgtAtt ] 
+            Just (Ex (tbl :: TableSpec tbl)) -> 
+              case act of 
+                Ins -> withSingT (typeOfTableSpec tbl) $ \(singFromProxy -> SingT (WSQLRow{})) -> 
+                         Insert tbl (unsafeSQLValFromQuery $ expr2SQL fSpec toInsDel)
+                         
+                Del -> 
+                  let toDelExpr :: SQLVal ('SQLRel ('SQLRow '[ "src" ::: 'SQLAtom, "tgt" ::: 'SQLAtom ] ))
+                      toDelExpr = unsafeSQLValFromQuery (expr2SQL fSpec toInsDel)
+                      src = sing :: SingT "src" 
+                      tgt = sing :: SingT "tgt" 
+                      dom = toDelExpr T.! src 
+                      cod = toDelExpr T.! tgt 
+
+                      cond :: SQLVal ('SQLRow '[ "src" ::: 'SQLAtom, "tgt" ::: 'SQLAtom ] ) -> SQLVal 'SQLBool 
+                      cond = \tup -> T.sql T.And (T.in_ (tup T.! src) dom) (T.in_ (tup T.! tgt) cod)
+
+                      -- Unsafely recasting the type of `cond' 
+                      cond' :: SQLVal ('SQLRow tbl) -> SQLVal 'SQLBool 
+                      cond' = \(SQLQueryVal x) -> cond (SQLQueryVal x) 
+
+                  in Delete tbl cond' 
+                      
+
+        ScalarSQL{} -> fatal 0 "ScalarSQL unexecpted here" 
+    
 
 -- (forall tbl i j . TableSpec tbl -> i `Elem` tbl -> j `Elem` tbl -> 
 
