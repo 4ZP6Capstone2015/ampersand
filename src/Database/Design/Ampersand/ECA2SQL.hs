@@ -29,19 +29,23 @@ import Database.Design.Ampersand.ECA2SQL.Singletons
 
 -- Convert a declaration to a table specification.
 -- Based on Database.Design.Ampersand.FSpec.SQL.selectDeclaration
-decl2TableSpec :: FSpec -> Declaration ->  TableSpec '[ "src" ::: 'SQLAtom, "tgt" ::: 'SQLAtom ]
-decl2TableSpec fSpec decl = 
-  let (plug,src,tgt) = 
-        case decl of 
-          Sgn{} -> case getDeclarationTableInfo fSpec decl of { (p,a,b) -> (p,name a,name b) }
-          Isn{} -> let (p,a) = getConceptTableInfo fSpec (detyp decl) 
-                   in (p,name a, freshName (name a) 1)
+decl2TableSpec :: FSpec -> Declaration 
+               -> (forall k i j . TableSpec k -> i `Elem` k -> j `Elem` k -> r) 
+               -> r 
+decl2TableSpec = undefined
+
+-- decl2TableSpec fSpec decl = 
+--   let (plug,src,tgt) = 
+--         case decl of 
+--           Sgn{} -> case getDeclarationTableInfo fSpec decl of { (p,a,b) -> (p,name a,name b) }
+--           Isn{} -> let (p,a) = getConceptTableInfo fSpec (detyp decl) 
+--                    in (p,name a, freshName (name a) 1)
                     
-          Vs{}  -> error "decl2TableSpec: V[_,_] not expected here"
-  in tableSpec' (Name Nothing $ name plug) ((K src :*: SingT WSQLAtom) :> (K tgt :*: SingT WSQLAtom) :> PNil) $ \case 
-       Just (Refl,tb) -> TableAlias_ (sing :: SingT '[ "src", "tgt" ]) tb 
-       Nothing -> error $ "decl2TableSpec: declaration did not produce unique table spec:\n" 
-                    ++ show (src, tgt) 
+--           Vs{}  -> error "decl2TableSpec: V[_,_] not expected here"
+--   in tableSpec' (Name Nothing $ name plug) ((K src :*: SingT WSQLAtom) :> (K tgt :*: SingT WSQLAtom) :> PNil) $ \case 
+--        Just (Refl,tb) -> TableAlias_ (sing :: SingT '[ "src", "tgt" ]) tb 
+--        Nothing -> error $ "decl2TableSpec: declaration did not produce unique table spec:\n" 
+--                     ++ show (src, tgt) 
 
 
 
@@ -107,14 +111,14 @@ eca2SQL fSpec@FSpec{plugInfos=_plugInfos} (ECA _ delta action _) =
                     _ -> error "eca2SQL: Got a delta which is not a parameter"
         
         paClause2SQL :: PAclause -> SQLValRef 'SQLBool -> SQLStatement 'SQLUnit
-
+{-
         paClause2SQL (Do Ins insInto toIns _motive) = \k ->                    -- PAClause case of Insert
           let tbl = decl2TableSpec fSpec insInto in 
           Insert tbl (unsafeSQLValFromQuery $ expr2SQL' toIns) :>>=            -- Insert :: TableSpec -> QueryExpr -> SQLStatement ()  
           const (done k)                                                       -- decl2TableSpec = fetch table specification
                                                                                -- expr2SQL = calls expr2SQL from SQL.hs, returns a QueryExpr for the toIns (Expression)
 
-
+-}
         paClause2SQL (Nop _motive) = done                                   -- PAClause case of Nop
         paClause2SQL (Blk _motive) = notDone                                -- PAClause case of Blk
                                                                             -- tells which expression from whichule has caused the blockage
@@ -128,7 +132,7 @@ eca2SQL fSpec@FSpec{plugInfos=_plugInfos} (ECA _ delta action _) =
                             IfSQL (deref checkDone) SQLNoop doPs 
                  ) fin ps 
 
-      
+      {-
         paClause2SQL (Do Del delFrom toDel _motive) =                       -- PAClause case of Delete
           let tbl = decl2TableSpec fSpec delFrom
               -- This needs a type annotation because it is unsafe
@@ -140,7 +144,8 @@ eca2SQL fSpec@FSpec{plugInfos=_plugInfos} (ECA _ delta action _) =
               cod = toDelExpr T.! tgt 
               cond = \tup -> T.sql T.And (T.in_ (tup T.! src) dom) (T.in_ (tup T.! tgt) cod)
           in \k -> Delete tbl cond :>>= const (done k) 
-           
+-}           
+
         paClause2SQL (ALL ps _motive) = \k ->                               -- PAClause case of ALL; all PAClauses are executed
           NewRef sing (Just "checkDone") Nothing :>>= \checkDone -> 
           foldl (\doPs p -> SetRef checkDone T.false :>>= \_ ->            -- sequential execution of all PAClauses
