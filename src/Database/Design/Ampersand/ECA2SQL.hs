@@ -31,16 +31,17 @@ import Database.Design.Ampersand.ECA2SQL.Singletons
 
 -- Convert a declaration to a table specification.
 -- Based on Database.Design.Ampersand.FSpec.SQL.selectDeclaration
-decl2TableSpec :: FSpec -> Declaration 
-               -> (forall k i j . TableSpec k -> i `Elem` k -> j `Elem` k -> r) 
-               -> r 
-decl2TableSpec fSpec decl k = 
-  case getDeclarationTableInfo fSpec decl of 
-    (plug, srcAtt, tgtAtt) -> 
-      case plug of 
-        TblSQL{} -> undefined
-        BinSQL{} -> undefined
-        ScalarSQL{} -> impossible "ScalarSQL unexecpted here" () 
+
+-- decl2TableSpec :: FSpec -> Declaration 
+--                -> (forall k i j . TableSpec k -> i `Elem` k -> j `Elem` k -> r) 
+--                -> r 
+-- decl2TableSpec fSpec decl k = 
+--   case getDeclarationTableInfo fSpec decl of 
+--     (plug, srcAtt, tgtAtt) -> 
+--       case plug of 
+--         TblSQL{} -> undefined
+--         BinSQL{} -> undefined
+--         ScalarSQL{} -> impossible "ScalarSQL unexecpted here" () 
 
 
 unsafeMkInsDelAtom :: FSpec -> Declaration -> InsDel -> Expression -> SQLStatement 'SQLUnit 
@@ -64,7 +65,7 @@ unsafeMkInsDelAtom fSpec decl act toInsDel =
                          
                 Del -> 
                   let toDelExpr :: SQLVal ('SQLRel ('SQLRow '[ "src" ::: 'SQLAtom, "tgt" ::: 'SQLAtom ] ))
-                      toDelExpr = unsafeSQLValFromQuery (expr2SQL fSpec toInsDel)
+                      toDelExpr = unsafeSQLValFromQuery $ expr2SQL fSpec toInsDel
                       src = sing :: SingT "src" 
                       tgt = sing :: SingT "tgt" 
                       dom = toDelExpr T.! src 
@@ -83,71 +84,14 @@ unsafeMkInsDelAtom fSpec decl act toInsDel =
         ScalarSQL{} -> fatal 0 "ScalarSQL unexecpted here" 
     
 
--- (forall tbl i j . TableSpec tbl -> i `Elem` tbl -> j `Elem` tbl -> 
-
--- decl2TableSpec fSpec decl = 
---   let (plug,src,tgt) = 
---         case decl of 
---           Sgn{} -> case getDeclarationTableInfo fSpec decl of { (p,a,b) -> (p,name a,name b) }
---           Isn{} -> let (p,a) = getConceptTableInfo fSpec (detyp decl) 
---                    in (p,name a, freshName (name a) 1)
-                    
---           Vs{}  -> error "decl2TableSpec: V[_,_] not expected here"
---   in tableSpec' (Name Nothing $ name plug) ((K src :*: SingT WSQLAtom) :> (K tgt :*: SingT WSQLAtom) :> PNil) $ \case 
---        Just (Refl,tb) -> TableAlias_ (sing :: SingT '[ "src", "tgt" ]) tb 
---        Nothing -> error $ "decl2TableSpec: declaration did not produce unique table spec:\n" 
---                     ++ show (src, tgt) 
-
--- TODO: This function could do with some comments 
--- TODO: Test eca2SQL
--- TODO: Properly deal with the delta.. this will almost certainly not work.
--- TODO: Add an option to the ampersand executable which will print all of the 
---       eca rules and their corresponding SQL methods to stderr. 
--- TODO: Add the motives in comments to the generated code 
-
 eca2SQL :: FSpec -> ECArule -> SQLMethod '[] 'SQLBool
-eca2SQL fSpec@FSpec{plugInfos=_plugInfos} (ECA _ delta action _) =  
+eca2SQL fSpec@FSpec{plugInfos=_plugInfos} (ECA (On _insDel _ruleDecl) delta action _) =  
   MkSQLMethod sing $ \PNil -> 
     NewRef sing (Just "checkDone") (Just T.false) :>>= \checkDone -> 
     paClause2SQL action checkDone :>>= \_ -> 
     SQLRet (deref checkDone)
   
       where 
-        -- renameECA :: Declaration -> ECArule -> ECArule 
-
-        -- -- TODO: Figure out how this plug stuff works... 
-        -- deltaCtx = case delta of 
-        --             Sgn{decsgn = Sign a _} -> EDcI a -- ???? 
-        --             Isn{detyp} -> EDcI detyp
-        --             _ -> error "eca2SQL/deltaCtx:???"
-                     
-        -- deltaObj = Obj 
-        --   { objnm = name delta, objpos = OriginUnknown, objctx = deltaCtx 
-        --   , objcrud = Cruds OriginUnknown (Just True) (Just True) (Just True) (Just True) 
-        --   , objmsub = Nothing, objstrs = [], objmView = Nothing 
-        --   }
-        -- deltaPlug = makeUserDefinedSqlPlug originalContext deltaObj
-        -- deltaPlug = BinSQL 
-        --   { sqlname = name delta 
-        --   , columns = ( Att { attName = "src" 
-        --                     , attExpr = EDcD delta    
-        --                     , attType = SQLVarchar 255 
-        --                     , attUse  = PlainAttr
-        --                     , attNull = True
-        --                     , attUniq = True }
-        --               , Att { attName = "tgt" 
-        --                     , attExpr = EDcD delta    
-        --                     , attType = SQLVarchar 255 
-        --                     , attUse  = PlainAttr
-        --                     , attNull = True
-        --                     , attUniq = True }
-        --               )
-        --   , cLkpTbl = [] --  ??? [(A_Concept, SqlAttribute)]
-        --   , mLkp = EDcD delta -- :: Expression
-        --   }
-
-        -- fSpec' = fSpec { plugInfos = InternalPlug deltaPlug : plugInfos } 
-
         expr2SQL' = expr2SQL fSpec              -- calling expr2SQL function from SQL.hs
                                                 -- returns a QueryExpr (for a select query)  
   

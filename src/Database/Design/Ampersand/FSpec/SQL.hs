@@ -25,9 +25,9 @@ class SQLAble a where
     intercalate (if i == 0 then " " else "\n"++replicate i ' ') .  lines . -- is i = int for space? Yes!
        prettyQueryExpr theDialect . toSQL . f   
     
-
 instance SQLAble Expression where  
-  prettySQLQuery = makeANice . selectExpr 
+  prettySQLQuery = makeANice . selectExpr
+ 
 instance SQLAble Declaration where
   prettySQLQuery = makeANice . selectDeclaration
   
@@ -44,13 +44,20 @@ pattern Name n = Sm.Name Nothing n
 pattern StringLit :: String -> ValueExpr
 pattern StringLit x = Sm.StringLit "\"" "\"" x
 
+expr2SQL' :: (Declaration -> Maybe QueryExpr) -> FSpec -> Expression -> QueryExpr 
+expr2SQL' k fs e = toSQL $ selectExpr' k fs e 
+
 expr2SQL :: FSpec -> Expression -> QueryExpr 
-expr2SQL fs e = toSQL $ selectExpr fs e
+expr2SQL = expr2SQL' (const Nothing) 
 
 sourceAlias, targetAlias :: Name
 sourceAlias = (Name "src") 
 targetAlias = (Name "tgt")
-selectExpr :: FSpec    -- current context
+
+selectExpr = selectExpr' (const Nothing) 
+
+selectExpr' :: (Declaration -> Maybe QueryExpr) -- Substitue for variables 
+        -> FSpec    -- current context
         -> Expression  -- expression to be translated
         -> BinQueryExpr   -- resulting info for the binary SQL expression
 -- In order to translate all Expressions, code generators have been written for EUni ( \/ ), EIsc ( /\ ), EFlp ( ~ ), ECpl (unary - ), and ECps ( ; ),
@@ -61,14 +68,17 @@ selectExpr :: FSpec    -- current context
 -- That allows more efficient code while retaining correctness and completeness as much as possible.
 -- Code for the Kleene operators EKl0 ( * ) and EKl1 ( + ) is not done, because this cannot be expressed in SQL.
 -- These operators must be eliminated from the Expression before using selectExpr, or else you will get fatals.
-selectExpr fSpec expr 
- = fromMaybe (nonSpecialSelectExpr fSpec expr) (maybeSpecialCase fSpec expr) --special cases for optimized results.
+selectExpr' substVar fSpec expr 
+ = fromMaybe (nonSpecialSelectExpr' substVar fSpec expr) (maybeSpecialCase' substVar fSpec expr) --special cases for optimized results.
 
 -- Special cases for optimized SQL generation
 -- Sometimes it is possible to generate queries that perform better. If this is the case for some 
 -- expression, this function will return the optimized query. 
 maybeSpecialCase :: FSpec -> Expression -> Maybe BinQueryExpr
-maybeSpecialCase fSpec expr = 
+maybeSpecialCase = maybeSpecialCase' (const Nothing) 
+
+maybeSpecialCase' :: (Declaration -> Maybe QueryExpr) -> FSpec -> Expression -> Maybe BinQueryExpr
+maybeSpecialCase' substVar fSpec expr = 
   case expr of 
     EIsc (EDcI a , ECpl (ECps (EDcD r,EFlp (EDcD r')) )) 
       | r == r'   -> Just . BQEComment 
@@ -149,9 +159,11 @@ maybeSpecialCase fSpec expr =
                                          }
     _ -> Nothing 
 
-
 nonSpecialSelectExpr :: FSpec -> Expression -> BinQueryExpr
-nonSpecialSelectExpr fSpec expr=
+nonSpecialSelectExpr = nonSpecialSelectExpr' (const Nothing) 
+
+nonSpecialSelectExpr' :: (Declaration -> Maybe QueryExpr) -> FSpec -> Expression -> BinQueryExpr
+nonSpecialSelectExpr' substVar fSpec expr=
     case expr of
     EIsc{} -> 
     {- The story on the case of EIsc:
@@ -240,6 +252,7 @@ nonSpecialSelectExpr fSpec expr=
                                                   e@BSE{}      -> bseWhr e
                                                   BCQE{}       -> fatal 129 "makeSelectable is not doing what it is supposed to do!" 
                                                   BQEComment{} -> fatal 130 "makeSelectable is not doing what it is supposed to do!" 
+                                                  RawQuery{}   -> fatal 131 "makeSelectable is not doing what it is supposed to do!" 
                                        sResult = makeIntersectSelectExpr ts
                                        makeSelectable :: BinQueryExpr -> BinQueryExpr
                                        makeSelectable x =
@@ -637,10 +650,14 @@ toTableRef :: BinQueryExpr -> TableRef
 toTableRef = TRQueryExpr . toSQL
      
 selectDeclaration :: FSpec -> Declaration -> BinQueryExpr
-selectDeclaration fSpec dcl =
+selectDeclaration = selectDeclaration' (const Nothing) 
+
+selectDeclaration' :: (Declaration -> Maybe QueryExpr) -> FSpec -> Declaration -> BinQueryExpr
+selectDeclaration' substVar fSpec dcl =
   case dcl of
-    Sgn{}  ->
-      if "Delta" == decnm dcl then deltaBSE $ decsgn dcl else leafCode (getDeclarationTableInfo fSpec dcl)
+    _ | Just sql <- substVar dcl -> RawQuery sql 
+    Sgn{}  -> leafCode (getDeclarationTableInfo fSpec dcl)
+      -- if "Delta" == decnm dcl then deltaBSE $ decsgn dcl else leafCode (getDeclarationTableInfo fSpec dcl)
     Isn{}  -> let (plug, c) = getConceptTableInfo fSpec (detyp dcl)
               in leafCode (plug, c, c)
     Vs sgn
@@ -729,6 +746,7 @@ data BinQueryExpr = BSE  { bseSrc :: ValueExpr       -- ^ source attribute and t
                          , bcqe0 ::    BinQueryExpr  -- ^ Left  expression
                          , bcqe1 ::    BinQueryExpr  -- ^ Right expression
                          }
+                  | RawQuery { rawQuery :: QueryExpr } 
                   | BQEComment [Comment] BinQueryExpr
                                
                         
@@ -755,6 +773,7 @@ toSQL bqe
                     }
     (BQEComment c (BQEComment c' e)) -> toSQL $ BQEComment (c++c') e
     (BQEComment c e) -> QEComment c (toSQL e)
+    RawQuery q -> q 
     
 sqlConceptTable :: FSpec -> A_Concept -> TableRef
 sqlConceptTable fSpec a = TRSimple [sqlConcept fSpec a]
