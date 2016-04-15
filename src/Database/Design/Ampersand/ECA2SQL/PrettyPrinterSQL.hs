@@ -71,7 +71,7 @@ prettyRec (x :>>= f) =
         (ppr_fx, val_fx) -> (ppr_x <> ";" <$$> ppr_fx, val_fx)
 
 prettyRec (Insert tableSpec_ expr2ins) = retUnit $ 
-  text "INSERT INTO" <+> showTableSpec tableSpec_ <+> text "VALUES " <+> lparen  <+> showSQLVal expr2ins <+> rparen 
+  text "INSERT INTO" <+> showTableSpec tableSpec_ <+> lparen <+> showSQLVal expr2ins <+> rparen 
 
 prettyRec (Delete tableSpec_ from) = retUnit $ foldl1 (<>) 
   [ text "DELETE FROM" 

@@ -38,10 +38,10 @@ getFiles ext dir =
 
 getTestScripts :: IO [FilePath]
 getTestScripts = do
---        fs <- getFiles ".adl" "ArchitectureAndDesign"
+       fs <- getFiles ".adl" "ArchitectureAndDesign"
        ss <- getFiles ".adl" $ ".." </> "ampersand-models" </> "Tests" </> "ShouldSucceed"
---        ds <- getFiles ".adl" $ "AmpersandData" </> "FormalAmpersand"
-       return ss
+       ds <- getFiles ".adl" $ "AmpersandData" </> "FormalAmpersand"
+       return $ fs ++ ss ++ ds 
         --enabling these test as a single testcase will stop the sentinel from working. Was: fs ++ ss ++ ds -- ++ models
 
 
