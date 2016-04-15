@@ -1,13 +1,16 @@
 {-# LANGUAGE PatternSynonyms, NoMonomorphismRestriction, OverloadedStrings, LambdaCase, RoleAnnotations, LiberalTypeSynonyms #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# OPTIONS -fno-warn-unticked-promoted-constructors #-}
+module Main where
+
 import Control.Monad (unless)
 import Data.List (stripPrefix)
 import System.Exit (exitFailure)
 import Test.QuickCheck.All (quickCheckAll)
-module Database.Design.Ampersand.ECA2SQL
-  ( module Database.Design.Ampersand.ECA2SQL
-  ) where
+
+-- module Database.Design.Ampersand.ECA2SQL
+--  ( module Database.Design.Ampersand.ECA2SQL
+--  ) where
 import Database.Design.Ampersand.Core.AbstractSyntaxTree
   ( ECArule(..), PAclause(..), Expression(..), Declaration(..), AAtomValue(..), InsDel(..), Event(..)
   , A_Context(..), ObjectDef(..), ObjectDef(..), Origin(..), Cruds(..), Signature(..)
@@ -29,6 +32,8 @@ import qualified Database.Design.Ampersand.ECA2SQL.TSQLCombinators as T
 import qualified GHC.TypeLits as TL
 import Singletons
 
+main :: IO ()
+main = return ()
 
 -- eca2SQLtest :: eca2SQL -> PAclause -> SQLValRef 'SQLBool -> SQLStatement 'SQLUnit
 -- cant be proven without table, passes cabal type test repeatedly

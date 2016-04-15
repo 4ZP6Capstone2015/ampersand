@@ -18,6 +18,7 @@ import Database.Design.Ampersand.ECA2SQL.Equality
 import Database.Design.Ampersand.ECA2SQL.Trace 
 import Numeric.Natural
 import Control.DeepSeq
+import Test.QuickCheck 
 
 -- test
 
@@ -50,15 +51,15 @@ class (kp ~ 'KProxy) => SingKind (kp :: KProxy k) where
                    -> SingWitness kp ty0 rep0 
                    -> SingWitness kp ty1 rep1 
                    -> ty0 :~: ty1 
-  singKindWitness1 x a b = a `seq` b `seq` safeCoerce "sing1" x 
-  -- singKindWitness1 x a b = x `seq` a `seq` b `seq` unsafeCoerce (Refl :: ty0 :~: ty0) 
+  -- singKindWitness1 x a b = a `seq` b `seq` safeCoerce "sing1" x 
+  singKindWitness1 x a b = x `seq` a `seq` b `seq` unsafeCoerce (Refl :: ty0 :~: ty0) 
 
   singKindWitness2 :: forall ty0 ty1 rep0 rep1 . ty0 :~: ty1 
                    -> SingWitness kp ty0 rep0 
                    -> SingWitness kp ty1 rep1 
                    -> rep0 :~: rep1
-  singKindWitness2 x a b = a `seq` b `seq` safeCoerce "sing2" x 
-  -- singKindWitness2 x a b = x `seq` a `seq` b `seq` unsafeCoerce (Refl :: rep0 :~: rep0)
+  -- singKindWitness2 x a b = a `seq` b `seq` safeCoerce "sing2" x 
+  singKindWitness2 x a b = x `seq` a `seq` b `seq` unsafeCoerce (Refl :: rep0 :~: rep0)
 
   type ValOfSing (kp :: KProxy k)  
 
@@ -168,6 +169,36 @@ instance (WitnessSingI x, TyRepSingI (TyRepOf x)) => Sing x where
 -- %== decideable equality, if you have a value of singleton type; this function allows you to make arbitrary comparisons to it; e.g., when you construct a row, a name must be unique -- expressed at type level, list of names that carry type information such that when you pattern match on it, you gain type information; this give you the ability to write proofs using pattern matching; when you get the type returned
 ------- Basic types
 -- Bool
+
+prop_transitivity ::  (forall x y . f x -> f y -> Bool) -> Exists f -> Exists f -> Exists f -> Bool   
+prop_transitivity f (Ex x) (Ex y) (Ex z) = not (f x y && f y z) || (f x z)  
+
+instance SingKind ('KProxy :: KProxy k) => Show (Exists (SingT :: k -> *))
+
+instance Arbitrary (Exists (SingT :: TL.Nat -> *)) where
+  arbitrary = (\q -> case TL.someNatVal (fromIntegral q) of { Just (TL.SomeNat r) -> Ex . SingT . WNat $ r } ) <$> (arbitrary :: Gen Natural)  
+
+prop_HEq_trans = property $ prop_transitivity (\(x :: SingT (q :: TL.Nat)) y -> dec2bool $ x %== y) 
+
+
+prop_refl :: (forall x y . f x -> f y -> Bool) -> Exists f -> Bool 
+prop_refl f (Ex x) = f x x
+
+prop_sym ::  (forall x y . f x -> f y -> Bool) -> Exists f -> Exists f -> Bool 
+prop_sym f (Ex x) (Ex y) = not (f x y) || (f y x) 
+
+
+prop_equality :: (Show (Exists f), Arbitrary (Exists f)) => (forall x y . f x -> f y -> Bool) -> Property 
+prop_equality f = prop_transitivity f .&&. prop_refl f .&&. prop_sym f 
+
+prop_HEq = prop_equality (\(x :: SingT (q :: TL.Nat)) y -> dec2bool $ x %== y)
+
+-- exists f = (forall f . f x -> r) -> r
+-- Existential quantifier 
+
+
+
+
 
 type BoolKind = ('KProxy :: KProxy Bool)
 boolKind = Proxy :: Proxy BoolKind 

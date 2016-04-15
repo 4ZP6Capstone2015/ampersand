@@ -59,7 +59,8 @@ library
                      zlib == 0.5.*,
                      wl-pprint,
                      MissingH,
-                     deepseq >= 1.4.0.0 
+                     deepseq >= 1.4.0.0,
+                     QuickCheck >= 2.8.0
 
   exposed-modules:
                      Database.Design.Ampersand,
@@ -176,8 +177,7 @@ library
                      Database.Design.Ampersand.ECA2SQL.Utils,
                      Database.Design.Ampersand.ECA2SQL.Singletons,
                      Database.Design.Ampersand.ECA2SQL.PrettyPrinterSQL, 
-                     Database.Design.Ampersand.ECA2SQL.Trace 
-
+                     Database.Design.Ampersand.ECA2SQL.Trace
                 
 executable ampersand
   main-is:           Main.hs
@@ -328,8 +328,21 @@ executable ampersand
                      Database.Design.Ampersand.Output.ToJSON.Interfaces,
                      Database.Design.Ampersand.Output.ToJSON.Others,
                      Database.Design.Ampersand.ECA2SQL,
-                     Database.Design.Ampersand.ECA2SQL.PrettyPrinterSQL                    
+                     Database.Design.Ampersand.ECA2SQL.PrettyPrinterSQL
 
+
+executable testECA
+  main-is:           Database/Design/Ampersand/ECA2SQL/ECATest.hs
+  hs-source-dirs:    src
+  default-language:  Haskell2010
+  -- default-extensions:NamedFieldPuns, RecordWildCards
+  default-extensions:NamedFieldPuns, RecordWildCards, LambdaCase, PatternSynonyms, EmptyCase, PolyKinds, DataKinds, DefaultSignatures,
+                     GADTs, ConstraintKinds, TypeFamilies, RankNTypes, FlexibleContexts, FlexibleInstances, MultiParamTypeClasses
+                     FunctionalDependencies, TypeOperators
+  ghc-options:       -rtsopts -Wall
+  build-depends:     ampersand == 3.3.0,
+                     base >= 4.7 && < 5.0,
+                     QuickCheck == 2.8.*
 
 Test-Suite ampersand-test
   type:              exitcode-stdio-1.0
