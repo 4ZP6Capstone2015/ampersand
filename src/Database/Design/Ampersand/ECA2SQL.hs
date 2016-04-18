@@ -87,15 +87,23 @@ unsafeMkInsDelAtom fSpec decl =
 unsafeDeclToTbl :: FSpec -> Declaration -> (forall (xs :: [SQLType]) . Prod SingT xs -> r) -> r 
 unsafeDeclToTbl = error "TODO"  
 
+prod2VectorQuery :: Prod (SQLValSem :.: 'SQLRef) xs -> QueryExpr 
+prod2VectorQuery = 
+  Values . (:[]) . foldrProd [] (\(Cmp r) ->
+    case deref r of 
+      SQLScalarVal x -> (x:)
+      SQLQueryVal  x -> (SubQueryExpr SqSq x:) )
 
-eca2SQL :: FSpec -> ECArule -> (forall k . SQLMethod k 'SQLBool -> r) -> r
-eca2SQL fSpec@FSpec{plugInfos=_plugInfos} (ECA (On _insDel _ruleDecl) delta action _) q = q $ 
+
+eca2SQL :: FSpec -> ECArule -> (forall (k :: [SQLType]) . SQLMethod k 'SQLBool -> r) -> r
+eca2SQL fSpec@FSpec{plugInfos=_plugInfos} (ECA (On _insDel _ruleDecl) delta action _) q = 
   unsafeDeclToTbl fSpec _ruleDecl $ \argsT -> 
-  MkSQLMethod argsT $ \_args -> 
+  q $ MkSQLMethod (prod2sing argsT) $ \_args -> 
     let expr2SQL' = FSpec.expr2SQL' (\case 
-                      "Delta" -> Just $ error "TODO" 
+                      d | d == delta -> Just (prod2VectorQuery _args)  
                       _ -> Nothing
                       ) fSpec             
+
         -- calling expr2SQL function from SQL.hs
         -- returns a QueryExpr (for a select query)  
   

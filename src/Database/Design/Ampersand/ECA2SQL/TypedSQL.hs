@@ -142,7 +142,7 @@ data SQLValSem (x :: SQLRefType) where
   Unit :: SQLValSem 'SQLUnit
   Method_ :: (Sing args, Sing out) => Name -> SQLValSem ('SQLMethod args out) 
   Ref_ :: Sing x => Name -> SQLValSem ('SQLRef x) 
-  Val :: SQLVal x -> SQLValSem ('Ty x) 
+  Val :: { valOfValSem :: SQLVal x } -> SQLValSem ('Ty x) 
 
 -- Pattern match only (no constructor syntax). These permit access (but not the
 -- ability to construct) to the underlying untyped representation. 
