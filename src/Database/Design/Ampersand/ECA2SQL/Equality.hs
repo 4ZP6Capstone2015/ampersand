@@ -96,9 +96,6 @@ dec2bool :: DecEq a b -> Bool
 dec2bool = \case { Yes{} -> True; No{} -> False } 
  
 
-
-
-
 -- for debugging  
 safeCoerce :: String -> a -> b
 safeCoerce str _ = error $ "unsafeCoerce:" ++ str

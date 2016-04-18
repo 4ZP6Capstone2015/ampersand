@@ -12,6 +12,7 @@ module Database.Design.Ampersand.ECA2SQL.Utils
   , module GHC.Exts
   , module Data.Type.Equality
   , module Database.Design.Ampersand.ECA2SQL.Equality 
+  , module Database.Design.Ampersand.Basics.Assertion
   ) where 
 
 import Control.Applicative 
@@ -26,8 +27,14 @@ import qualified GHC.Exts as Exts
 import Language.SQL.SimpleSQL.Syntax (Name(..))
 import Database.Design.Ampersand.ECA2SQL.Equality 
 import Database.Design.Ampersand.ECA2SQL.Singletons
-import Database.Design.Ampersand.Basics.Assertion
+import Database.Design.Ampersand.Basics.Assertion (Justification(..), impossible) 
 import Control.DeepSeq
+
+-- A newtype whose NFData instance assume that `nf x == rnf x`
+-- for any `x` which is wrapped in the type. 
+newtype WHNFIsNF a = WHNFIsNF a 
+instance NFData (WHNFIsNF a) where 
+  rnf x = x `seq` () 
 
 instance IsString Name where fromString = Name Nothing 
 
@@ -35,6 +42,9 @@ instance IsString Name where fromString = Name Nothing
 data Prod (f :: k -> *) (xs :: [k]) where 
   PNil :: Prod f '[] 
   PCons :: f x -> Prod f xs -> Prod f (x ': xs) 
+
+instance (All (NFData &.> f) xs) => NFData (Prod f xs) where 
+  rnf = foldrProdC (Proxy :: Proxy (NFData &.> f)) () deepseq
 
 prod2sing :: forall xs . (SingKind ('KProxy :: KProxy k)) => Prod SingT (xs :: [k]) -> SingT (xs :: [k])
 prod2sing x0 = SingT (go x0) where 
@@ -67,6 +77,16 @@ foldrProd' :: (forall x xs . f x -> Prod g xs -> Prod g (x ': xs))
             -> Prod f xs1 -> Prod g xs1 
 foldrProd' _ PNil = PNil 
 foldrProd' f (PCons x xs) = f x (foldrProd' f xs) 
+
+data Holds c x where Holds :: c x => Holds c x 
+
+foldrProdC :: forall c xs acc f . All c xs => Proxy c -> acc -> (forall q . c q => f q -> acc -> acc) -> Prod f xs -> acc 
+foldrProdC pr z f = foldrProd z (\((Holds :: Holds c q0) :*: b) -> f b) . (zipProd (:*:) (mkProdC pr Holds))
+
+zipProd :: (forall x . f x -> g x -> h x) -> Prod f xs -> Prod g xs -> Prod h xs 
+zipProd _ PNil PNil = PNil 
+zipProd q (PCons x xs) (PCons y ys) = PCons (q x y) (zipProd q xs ys)
+zipProd _ q0 q1 = impossible "zipProd" (WHNFIsNF (q0, q1)) 
 
 foldlProd :: acc -> (forall q . f q -> acc -> acc) -> Prod f xs -> acc 
 foldlProd z _ PNil = z 
@@ -127,7 +147,7 @@ type family (&&) (x :: Bool) (y :: Bool) :: Bool where
 SFalse |&& _ = SFalse 
 _ |&& SFalse = SFalse 
 STrue |&& STrue = STrue 
-x |&& y = impossible  "Bool not {T,F}" (x `seq` y `seq` () )
+x |&& y = impossible  "Bool not {T,F}" (x, y) 
 
 type family And (xs :: [Bool]) :: Bool where 
   And '[] = 'True 
@@ -249,9 +269,9 @@ decSetRec = go (SingT WNil) where
     case (decNotElem seen (SingT wnm), go (SingT (WCons wnm seen')) (SingT xs)) of 
       (Yes p, Yes q) -> Yes (SetRec_Cons p q) 
       (No p, _) -> No (mapNeg (\case { SetRec_Cons x0 _ -> x0
-                                     ; a -> impossible  "SetRec of a (:) is not SetRec_Cons" (a `seq` ()) }) p) 
+                                     ; a -> impossible "SetRec of a (:) is not SetRec_Cons" a }) p) 
       (_, No p) -> No (mapNeg (\case { SetRec_Cons _ x0 -> x0
-                                     ; a -> impossible  "SetRec of a (:) is not SetRec_Cons" (a `seq` ()) }) p) 
+                                     ; a -> impossible "SetRec of a (:) is not SetRec_Cons" a }) p) 
 
 type family IsJust (x :: Maybe k) :: k where 
   IsJust ('Just x) = x 
@@ -285,7 +305,7 @@ lookupRec :: forall (xs :: [RecLabel Symbol b]) (nm :: Symbol) (r :: b) . (Looku
 lookupRec row nm = 
   elimSingT (lookupRecM row nm) $ \case 
     WJust r -> SingT r 
-    WNothing -> impossible  "LookupRec exists but is not Just" () 
+    WNothing -> impossible "LookupRec exists but is not Just" () 
 
 
 -- records to/from lists 
@@ -329,20 +349,25 @@ if_ap (IfA f) (IfA a) = IfA $
 class (x,y) => (&*&) (x :: Constraint) (y :: Constraint) 
 instance (x,y) => x &*& y 
 
+-- Composition of a constraint with a function 
+class (c (f x)) => (&.>) (c :: k' -> Constraint) (f :: k -> k') (x :: k) 
+instance (c (f x)) => (&.>) (c :: k' -> Constraint) (f :: k -> k') (x :: k) 
+
 -- uncurry
 
 class Uncurry f args o r | f args o -> r where 
-  uncurryN :: (Prod f args -> f o) -> r
+  uncurryN :: (Prod f args -> f o) -> r 
+  curryN :: r -> Prod f args -> f o 
 
 instance (f o ~ r) => Uncurry f '[] o r where 
   uncurryN f = f PNil 
+  curryN x PNil = x 
 
 instance (Uncurry f args o r, q ~ (f arg -> r)) => Uncurry f (arg ': args) o q where 
   uncurryN f arg = uncurryN (f . PCons arg) 
+  curryN f (PCons x xs) = curryN (f x) xs 
 
 -- fresh names
 
 freshName :: String -> Int -> String 
 freshName nm count = nm ++ show count
-
-

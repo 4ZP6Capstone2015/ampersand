@@ -83,6 +83,10 @@ instance SingKind ('KProxy :: KProxy SQLType) where
   withSingW (WSQLRow x) k = withSingW x $ const $ k Proxy 
   withSingW (WSQLVec x) k = withSingW x $ const $ k Proxy 
 
+  witness = error "SingKind{SQLType}: TODO - witness" 
+  sing2val' = error "SingKind{SQLType}: TODO - sing2val" 
+  val2sing' = error "SingKind{SQLType}: TODO - val2sing" 
+
   data SingWitness ('KProxy :: KProxy SQLType) x args where
     WSQLAtom :: SingWitness 'KProxy 'SQLAtom    ( 'TyCtr "SQLType_SQLAtom" '[] )
     WSQLBool :: SingWitness 'KProxy 'SQLBool    ( 'TyCtr "SQLType_SQLBool" '[] )
@@ -154,7 +158,7 @@ pattern GetRef x <- Ref_ x
 typeOfSem :: (f `IsElem` '[ 'SQLRef, 'Ty ]) => SQLValSem (f x) -> SQLTypeS x 
 typeOfSem Ref_{} = sing 
 typeOfSem (Val x) = typeOf x 
-typeOfSem x = impossible  "A SQLVal{Ref/Ty} was not a {Ref/Val}" (x `seq` ())
+typeOfSem x = impossible  "A SQLVal{Ref/Ty} was not a {Ref/Val}" (WHNFIsNF x) 
 
 -- Get the columns of a sql row.   
 colsOf :: SingT ('SQLRow xs) -> SingT xs
@@ -208,7 +212,7 @@ typeOfTableSpec' :: TableSpec t -> SingT t
 typeOfTableSpec' (MkTableSpec x) = 
   case typeOfSem x of 
     SingT (WSQLRel (WSQLRow t)) -> SingT t
-    q -> impossible  "Type of a table not (Rel (Row x)) f.s. x" (q `seq` ())
+    q -> impossible "Type of a table not (Rel (Row x)) f.s. x" q
 
 typeOfTableSpec' (TableAlias_ nms t') = tr nms $ recAssocs $ typeOfTableSpec' t' where 
   tr :: SingT newNames -> SingT xs -> SingT (ZipRec newNames xs) 

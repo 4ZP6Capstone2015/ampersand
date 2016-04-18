@@ -53,15 +53,15 @@ class (kp ~ 'KProxy) => SingKind (kp :: KProxy k) where
                    -> SingWitness kp ty0 rep0 
                    -> SingWitness kp ty1 rep1 
                    -> ty0 :~: ty1 
-  singKindWitness1 x a b = a `seq` b `seq` safeCoerce "sing1" x 
-  -- singKindWitness1 x a b = x `seq` a `seq` b `seq` unsafeCoerce (Refl :: ty0 :~: ty0) 
+  -- singKindWitness1 x a b = a `seq` b `seq` safeCoerce "sing1" x 
+  singKindWitness1 x a b = x `seq` a `seq` b `seq` unsafeCoerce (Refl :: ty0 :~: ty0) 
 
   singKindWitness2 :: forall ty0 ty1 rep0 rep1 . ty0 :~: ty1 
                    -> SingWitness kp ty0 rep0 
                    -> SingWitness kp ty1 rep1 
                    -> rep0 :~: rep1
-  singKindWitness2 x a b = a `seq` b `seq` safeCoerce "sing2" x 
-  -- singKindWitness2 x a b = x `seq` a `seq` b `seq` unsafeCoerce (Refl :: rep0 :~: rep0)
+  -- singKindWitness2 x a b = a `seq` b `seq` safeCoerce "sing2" x 
+  singKindWitness2 x a b = x `seq` a `seq` b `seq` unsafeCoerce (Refl :: rep0 :~: rep0)
 
   type ValOfSing (kp :: KProxy k)  
 
@@ -151,6 +151,9 @@ eqTyRep (STyNat _) (STySym _) = No $ mapNeg (\case {}) triviallyTrue
 -- Singletons of some kind in terms of their type rep. Using the constructor is safe. 
 data SingT (x :: k) where  
   SingT :: !(SingWitness ('KProxy :: KProxy k) (x :: k) x_rep) -> SingT x -- singleton witnesses for that datatype; accepts value for any representation; construct in a way that invalid values are not possible
+
+instance NFData (SingT x) where 
+  rnf x = x `seq` () 
 
 elimSingT :: SingT x -> (forall xr . SingWitness 'KProxy x xr -> r) -> r  -- x_rep is quantified, universally quantified function, given a sing witness of any representation type returns value r; passing in an arg that scrutinizes is invalid
 elimSingT (SingT x) f = f x  -- exist f is the same as for all types a such that there is a type g to f

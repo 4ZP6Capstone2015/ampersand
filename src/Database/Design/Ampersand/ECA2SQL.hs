@@ -92,8 +92,9 @@ prod2VectorQuery =
   Values . (:[]) . foldrProd [] (\(Cmp r) ->
     case deref r of 
       SQLScalarVal x -> (x:)
-      SQLQueryVal  x -> (SubQueryExpr SqSq x:) )
-
+      SQLQueryVal  x -> (SubQueryExpr SqSq x:) 
+    ) -- This case should probably be made impossible - as it stands, MySQL only supports 
+      -- 'scalar' types as function parameters. 
 
 eca2SQL :: FSpec -> ECArule -> (forall (k :: [SQLType]) . SQLMethod k 'SQLBool -> r) -> r
 eca2SQL fSpec@FSpec{plugInfos=_plugInfos} (ECA (On _insDel _ruleDecl) delta action _) q = 
