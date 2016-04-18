@@ -64,7 +64,7 @@ triviallyTrue :: Not (Not ())
 triviallyTrue = doubleneg ()  
 
 mapNeg :: (NFData a, NFData b) => (b -> a) -> Not a -> Not b 
-mapNeg f (Not_ q) = Not_ (\x -> q $!! (f $!! x)) 
+mapNeg f (Not_ q) = Not_ $ q `deepSeq` (\x -> q (f $!! x)) 
 
 elimNeg :: NFData a => Not a -> a -> Void 
 elimNeg (Not_ f) a = f $!! a

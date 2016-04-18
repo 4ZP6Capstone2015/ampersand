@@ -18,6 +18,7 @@ import Language.SQL.SimpleSQL.Syntax
 import Database.Design.Ampersand.FSpec.FSpec (PlugSQL(..), PlugInfo(..), SqlAttribute(..), SqlAttributeUsage(..), SqlTType(SQLVarchar))
 import Database.Design.Ampersand.FSpec.ToFSpec.ADL2Plug 
 import Database.Design.Ampersand.FSpec.SQL (expr2SQL,prettySQLQuery) --added Bin,to,Pretty
+import qualified Database.Design.Ampersand.FSpec.SQL as FSpec
 import Database.Design.Ampersand.FSpec.FSpecAux (getDeclarationTableInfo,getConceptTableInfo)
 import Database.Design.Ampersand.Basics (Named(..))
 import Database.Design.Ampersand.Core.ParseTree (makePSingleton)
@@ -45,7 +46,7 @@ import Database.Design.Ampersand.ECA2SQL.Singletons
 
 
 unsafeMkInsDelAtom :: FSpec -> Declaration -> InsDel -> Expression -> SQLStatement 'SQLUnit 
-unsafeMkInsDelAtom fSpec decl act toInsDel =
+unsafeMkInsDelAtom fSpec decl =
   case getDeclarationTableInfo fSpec decl of 
     (plug, srcAtt, tgtAtt) ->  
       case plug of 
@@ -58,7 +59,7 @@ unsafeMkInsDelAtom fSpec decl act toInsDel =
             Nothing -> fatal 0 $ unwords 
                         [ "Could not construct table spec from attributes\n", 
                         show srcAtt, " and ", show tgtAtt ] 
-            Just (Ex (tbl :: TableSpec tbl)) -> 
+            Just (Ex (tbl :: TableSpec tbl)) -> \act toInsDel -> 
               case act of 
                 Ins -> withSingT (typeOfTableSpec tbl) $ \(singFromProxy -> SingT (WSQLRow{})) -> 
                          Insert tbl (unsafeSQLValFromQuery $ expr2SQL fSpec toInsDel)
@@ -83,35 +84,29 @@ unsafeMkInsDelAtom fSpec decl act toInsDel =
 
         ScalarSQL{} -> fatal 0 "ScalarSQL unexecpted here" 
     
+unsafeDeclToTbl :: FSpec -> Declaration -> (forall (xs :: [SQLType]) . Prod SingT xs -> r) -> r 
+unsafeDeclToTbl = error "TODO"  
 
-eca2SQL :: FSpec -> ECArule -> SQLMethod '[] 'SQLBool
-eca2SQL fSpec@FSpec{plugInfos=_plugInfos} (ECA (On _insDel _ruleDecl) delta action _) =  
-  MkSQLMethod sing $ \PNil -> 
-    NewRef sing (Just "checkDone") (Just T.false) :>>= \checkDone -> 
-    paClause2SQL action checkDone :>>= \_ -> 
-    SQLRet (deref checkDone)
-  
-      where 
-        expr2SQL' = expr2SQL fSpec              -- calling expr2SQL function from SQL.hs
-                                                -- returns a QueryExpr (for a select query)  
+
+eca2SQL :: FSpec -> ECArule -> (forall k . SQLMethod k 'SQLBool -> r) -> r
+eca2SQL fSpec@FSpec{plugInfos=_plugInfos} (ECA (On _insDel _ruleDecl) delta action _) q = q $ 
+  unsafeDeclToTbl fSpec _ruleDecl $ \argsT -> 
+  MkSQLMethod argsT $ \_args -> 
+    let expr2SQL' = FSpec.expr2SQL' (\case 
+                      "Delta" -> Just $ error "TODO" 
+                      _ -> Nothing
+                      ) fSpec             
+        -- calling expr2SQL function from SQL.hs
+        -- returns a QueryExpr (for a select query)  
   
         done = \r -> SetRef r T.true  
         notDone = const SQLNoop
-
-        -- TODO: Do something with the delta?
-        _deltaNm = case delta of 
-                    Sgn{} -> decnm delta        -- returns the name of the declaration 
-                    _ -> error "eca2SQL: Got a delta which is not a parameter"
         
         paClause2SQL :: PAclause -> SQLValRef 'SQLBool -> SQLStatement 'SQLUnit
-{-
-        paClause2SQL (Do Ins insInto toIns _motive) = \k ->                    -- PAClause case of Insert
-          let tbl = decl2TableSpec fSpec insInto in 
-          Insert tbl (unsafeSQLValFromQuery $ expr2SQL' toIns) :>>=            -- Insert :: TableSpec -> QueryExpr -> SQLStatement ()  
-          const (done k)                                                       -- decl2TableSpec = fetch table specification
-                                                                               -- expr2SQL = calls expr2SQL from SQL.hs, returns a QueryExpr for the toIns (Expression)
+        paClause2SQL (Do insDel' tgtTbl tgtExpr _motive) = \k -> 
+          unsafeMkInsDelAtom fSpec tgtTbl insDel' tgtExpr :>>= \_ -> 
+          done k 
 
--}
         paClause2SQL (Nop _motive) = done                                   -- PAClause case of Nop
         paClause2SQL (Blk _motive) = notDone                                -- PAClause case of Blk
                                                                             -- tells which expression from whichule has caused the blockage
@@ -124,20 +119,6 @@ eca2SQL fSpec@FSpec{plugInfos=_plugInfos} (ECA (On _insDel _ruleDecl) delta acti
           foldl (\doPs p -> paClause2SQL  p checkDone :>>= \_ -> 
                             IfSQL (deref checkDone) SQLNoop doPs 
                  ) fin ps 
-
-      {-
-        paClause2SQL (Do Del delFrom toDel _motive) =                       -- PAClause case of Delete
-          let tbl = decl2TableSpec fSpec delFrom
-              -- This needs a type annotation because it is unsafe
-              toDelExpr :: SQLVal ('SQLRel ('SQLRow '[ "src" ::: 'SQLAtom, "tgt" ::: 'SQLAtom ] ))
-              toDelExpr = unsafeSQLValFromQuery (expr2SQL' toDel)
-              src = sing :: SingT "src" 
-              tgt = sing :: SingT "tgt" 
-              dom = toDelExpr T.! src 
-              cod = toDelExpr T.! tgt 
-              cond = \tup -> T.sql T.And (T.in_ (tup T.! src) dom) (T.in_ (tup T.! tgt) cod)
-          in \k -> Delete tbl cond :>>= const (done k) 
--}           
 
         paClause2SQL (ALL ps _motive) = \k ->                               -- PAClause case of ALL; all PAClauses are executed
           NewRef sing (Just "checkDone") Nothing :>>= \checkDone -> 
@@ -163,13 +144,7 @@ eca2SQL fSpec@FSpec{plugInfos=_plugInfos} (ECA (On _insDel _ruleDecl) delta acti
                  ) fin ps 
       
         paClause2SQL _ = error "paClause2SQL: unsupported operation" 
-        {- 
-        paClause2SQL (Let expr body _motive) = ???
-        paClause2SQL (New typ go _motive) = 
-          let tbl = decl2TableSpec fSpec (Isn typ)
-          in \k -> Insert tbl (Values [ replicate (length $ tableColumns tbl) sqlNull ]) :>>= \_ -> 
-                   ????
-                   -- No clue. Need to clarify what this actually does. Every single function in all of ampersand 
-                   -- throws an error at `Let' - so what the hell does it actually do?
-        -}
-
+    in 
+      NewRef sing (Just "checkDone") (Just T.false) :>>= \checkDone -> 
+      paClause2SQL action checkDone :>>= \_ -> 
+      SQLRet (deref checkDone)

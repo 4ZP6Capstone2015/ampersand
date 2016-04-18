@@ -1,5 +1,5 @@
 module Database.Design.Ampersand.FSpec.SQL
-  ( prettySQLQuery, expr2SQL )
+  ( prettySQLQuery, expr2SQL, expr2SQL' )
   
 where
 import Language.SQL.SimpleSQL.Syntax hiding (Name(Name), ValueExpr(StringLit))
@@ -26,7 +26,7 @@ class SQLAble a where
        prettyQueryExpr theDialect . toSQL . f   
     
 instance SQLAble Expression where  
-  prettySQLQuery = makeANice . selectExpr
+  prettySQLQuery = makeANice . selectExpr' (const Nothing) 
  
 instance SQLAble Declaration where
   prettySQLQuery = makeANice . selectDeclaration
@@ -54,8 +54,6 @@ sourceAlias, targetAlias :: Name
 sourceAlias = (Name "src") 
 targetAlias = (Name "tgt")
 
-selectExpr = selectExpr' (const Nothing) 
-
 selectExpr' :: (Declaration -> Maybe QueryExpr) -- Substitue for variables 
         -> FSpec    -- current context
         -> Expression  -- expression to be translated
@@ -74,11 +72,11 @@ selectExpr' substVar fSpec expr
 -- Special cases for optimized SQL generation
 -- Sometimes it is possible to generate queries that perform better. If this is the case for some 
 -- expression, this function will return the optimized query. 
-maybeSpecialCase :: FSpec -> Expression -> Maybe BinQueryExpr
-maybeSpecialCase = maybeSpecialCase' (const Nothing) 
+-- maybeSpecialCase :: FSpec -> Expression -> Maybe BinQueryExpr
+-- maybeSpecialCase = maybeSpecialCase' (const Nothing) 
 
 maybeSpecialCase' :: (Declaration -> Maybe QueryExpr) -> FSpec -> Expression -> Maybe BinQueryExpr
-maybeSpecialCase' substVar fSpec expr = 
+maybeSpecialCase' substVar fSpec expr = let selectExpr = selectExpr' substVar in 
   case expr of 
     EIsc (EDcI a , ECpl (ECps (EDcD r,EFlp (EDcD r')) )) 
       | r == r'   -> Just . BQEComment 
@@ -159,11 +157,8 @@ maybeSpecialCase' substVar fSpec expr =
                                          }
     _ -> Nothing 
 
-nonSpecialSelectExpr :: FSpec -> Expression -> BinQueryExpr
-nonSpecialSelectExpr = nonSpecialSelectExpr' (const Nothing) 
-
 nonSpecialSelectExpr' :: (Declaration -> Maybe QueryExpr) -> FSpec -> Expression -> BinQueryExpr
-nonSpecialSelectExpr' substVar fSpec expr=
+nonSpecialSelectExpr' substVar fSpec expr = let selectExpr = selectExpr' substVar in  
     case expr of
     EIsc{} -> 
     {- The story on the case of EIsc:
@@ -252,7 +247,6 @@ nonSpecialSelectExpr' substVar fSpec expr=
                                                   e@BSE{}      -> bseWhr e
                                                   BCQE{}       -> fatal 129 "makeSelectable is not doing what it is supposed to do!" 
                                                   BQEComment{} -> fatal 130 "makeSelectable is not doing what it is supposed to do!" 
-                                                  RawQuery{}   -> fatal 131 "makeSelectable is not doing what it is supposed to do!" 
                                        sResult = makeIntersectSelectExpr ts
                                        makeSelectable :: BinQueryExpr -> BinQueryExpr
                                        makeSelectable x =
@@ -497,7 +491,7 @@ nonSpecialSelectExpr' substVar fSpec expr=
                                            , bseTbl = [sqlConceptTable fSpec c]
                                            , bseWhr = Just (notNull (Iden [cAtt]))
                                            }
-    (EDcD d)             -> selectDeclaration fSpec d
+    (EDcD d)             -> selectDeclaration' substVar fSpec d
 
     (EBrk e)             -> selectExpr fSpec e
 
@@ -655,9 +649,13 @@ selectDeclaration = selectDeclaration' (const Nothing)
 selectDeclaration' :: (Declaration -> Maybe QueryExpr) -> FSpec -> Declaration -> BinQueryExpr
 selectDeclaration' substVar fSpec dcl =
   case dcl of
-    _ | Just sql <- substVar dcl -> RawQuery sql 
+    _ | Just sql <- substVar dcl 
+           -> BSE { bseSrc = Iden [ Name "src" ] -- TODO ; this should be looked up in getDeclInfo or the like 
+                  , bseTrg = Iden [ Name "tgt" ]
+                  , bseTbl = [ TRQueryExpr sql ] 
+                  , bseWhr = Nothing 
+                  } 
     Sgn{}  -> leafCode (getDeclarationTableInfo fSpec dcl)
-      -- if "Delta" == decnm dcl then deltaBSE $ decsgn dcl else leafCode (getDeclarationTableInfo fSpec dcl)
     Isn{}  -> let (plug, c) = getConceptTableInfo fSpec (detyp dcl)
               in leafCode (plug, c, c)
     Vs sgn
@@ -674,14 +672,6 @@ selectDeclaration' substVar fSpec dcl =
                      , bseWhr = Just (conjunctSQL (map notNull [src,trg]))
                      }
    where
-     deltaBSE :: Signature -> BinQueryExpr 
-     deltaBSE (Sign src tgt) = BSE  
-       { bseSrc = Iden [ QName "delta_src" ] 
-       , bseTrg = Iden [ QName "delta_tgt" ] 
-       , bseTbl = [ TRSimple [ QName $ "delta_" ++ name src ++ "_" ++ name tgt ] ] 
-       , bseWhr = Nothing 
-       } 
-
      leafCode :: (PlugSQL,SqlAttribute,SqlAttribute) -> BinQueryExpr
      leafCode (plug,s,t) 
          = BSE { bseSrc = Iden [QName (name s)]
@@ -746,7 +736,6 @@ data BinQueryExpr = BSE  { bseSrc :: ValueExpr       -- ^ source attribute and t
                          , bcqe0 ::    BinQueryExpr  -- ^ Left  expression
                          , bcqe1 ::    BinQueryExpr  -- ^ Right expression
                          }
-                  | RawQuery { rawQuery :: QueryExpr } 
                   | BQEComment [Comment] BinQueryExpr
                                
                         
@@ -773,7 +762,6 @@ toSQL bqe
                     }
     (BQEComment c (BQEComment c' e)) -> toSQL $ BQEComment (c++c') e
     (BQEComment c e) -> QEComment c (toSQL e)
-    RawQuery q -> q 
     
 sqlConceptTable :: FSpec -> A_Concept -> TableRef
 sqlConceptTable fSpec a = TRSimple [sqlConcept fSpec a]
