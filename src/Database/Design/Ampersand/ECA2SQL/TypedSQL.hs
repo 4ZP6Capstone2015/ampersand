@@ -204,7 +204,7 @@ typeOfTableSpec t = t `seq`
       q t' = 
         case t' of 
           (MkTableSpec (typeOfSem -> SingT (WSQLRel (WSQLRow _)))) -> Dict 
-          (TableAlias_ _ _) -> q t' 
+          (TableAlias_ _ _) -> error "TODO" -- q t' 
 
   in case typeOfTableSpec' t of { SingT x -> case q t of { Dict -> SingT (WSQLRow x) } }
 
@@ -252,12 +252,6 @@ tableSpec' nm0 tys0 k0 =
          Just (Refl, SingT rs) -> 
            case TL.someSymbolVal nm of 
              TL.SomeSymbol nmTy -> k (Just (Refl, SingT (WCons (WRecLabel (WSymbol nmTy) x) rs ) )) 
-
--- k (Just (_ {-Refl-}, _)) -- SingT (WSQLRow (WCons (WRecLabel _ x) rs)) ))
-
-
-               -- case SingT (WSymbol nmTy) %== e of 
-               --   SingT False -> 
 
 -- Create an table spec from runtime information. Returns Nothing if the table
 -- would not be valid. 
