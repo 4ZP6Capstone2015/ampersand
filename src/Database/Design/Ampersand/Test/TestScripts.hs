@@ -13,35 +13,36 @@ import Data.Conduit
 import Database.Design.Ampersand.Test.RunAmpersand (ampersand)
 import Database.Design.Ampersand.Input.ADL1.CtxError
 
---endswith :: String -> String -> Bool
---endswith a b = drop (length a - length b) a == b
+endswith :: String -> String -> Bool
+endswith a b = drop (length a - length b) a == b
 
 -- Returns tuple with files and subdirectories inside the given directory
---getDirectory :: FilePath -> IO ([FilePath],[FilePath])
---getDirectory path =
---    do contents <- getDirectoryContents path
---       let valid = filter (\x-> x /= "." && x /= "..") contents
---       let paths = map (path ++) valid
---       files <- filterM doesFileExist paths
---       subdirs <- filterM doesDirectoryExist paths
---       return (sort files, sort subdirs)
+getDirectory :: FilePath -> IO ([FilePath],[FilePath])
+getDirectory path =
+   do contents <- getDirectoryContents path
+      let valid = filter (\x-> x /= "." && x /= "..") contents
+      let paths = map (path ++) valid
+      files <- filterM doesFileExist paths
+      subdirs <- filterM doesDirectoryExist paths
+      return (sort files, sort subdirs)
 
---getFiles :: String -> FilePath -> IO [FilePath]
---getFiles ext dir =
---    do (fs, ds) <- getDirectory (dir++"/")
---       let files = filter (`endswith` ext) fs
---       foldM recursive files ds
---      where recursive rs d =
---                do ms <- getFiles ext d
---                   return $ ms ++ rs
+getFiles :: String -> FilePath -> IO [FilePath]
+getFiles ext dir =
+   do (fs, ds) <- getDirectory (dir++"/")
+      let files = filter (`endswith` ext) fs
+      foldM recursive files ds
+     where recursive rs d =
+               do ms <- getFiles ext d
+                  return $ ms ++ rs
 
 
 getTestScripts :: IO [FilePath]
 getTestScripts = do
---        fs <- getFiles ".adl" "ArchitectureAndDesign"
---        ss <- getFiles ".adl" $ ".." </> "ampersand-models" </> "Tests" </> "ShouldSucceed"
---        ds <- getFiles ".adl" $ "AmpersandData" </> "FormalAmpersand"
-        return $ [] --enabling these test as a single testcase will stop the sentinel from working. Was: fs ++ ss ++ ds -- ++ models
+       fs <- getFiles ".adl" "ArchitectureAndDesign"
+       ss <- getFiles ".adl" $ ".." </> "ampersand-models" </> "Tests" </> "ShouldSucceed"
+       ds <- getFiles ".adl" $ "AmpersandData" </> "FormalAmpersand"
+       return $ fs ++ ss ++ ds 
+        --enabling these test as a single testcase will stop the sentinel from working. Was: fs ++ ss ++ ds -- ++ models
 
 
 

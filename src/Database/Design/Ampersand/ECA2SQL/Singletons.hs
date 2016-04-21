@@ -1,6 +1,6 @@
 {-# LANGUAGE PatternSynonyms, NoMonomorphismRestriction, OverloadedStrings, LambdaCase, EmptyCase #-} 
 {-# LANGUAGE TemplateHaskell, QuasiQuotes, ScopedTypeVariables, PolyKinds, UndecidableInstances, DataKinds, DefaultSignatures #-}
-{-# LANGUAGE PartialTypeSignatures, TypeOperators #-} 
+{-# LANGUAGE PartialTypeSignatures, TypeOperators, MagicHash #-} 
 {-# OPTIONS -fno-warn-unticked-promoted-constructors #-} 
 
 {-# OPTIONS_GHC -fno-cse #-}
@@ -14,11 +14,14 @@ import Unsafe.Coerce
 import Data.Proxy (Proxy(..), KProxy(..))
 import GHC.TypeLits (Symbol, symbolVal, sameSymbol, KnownSymbol)
 import qualified GHC.TypeLits as TL  
-import Database.Design.Ampersand.ECA2SQL.Equality 
-import Database.Design.Ampersand.ECA2SQL.Trace 
+import Database.Design.Ampersand.ECA2SQL.Equality
+import Database.Design.Ampersand.Basics.Assertion
 import Numeric.Natural
 import Control.DeepSeq
 import Test.QuickCheck 
+import GHC.Types(Int(..))
+import GHC.Prim (dataToTag#)
+import Data.Function (on) 
 
 -- test
 
@@ -28,6 +31,9 @@ testval0 = sing :: SingT '( 'Just 10, '[ "x", "y" ] )
 
 withSingT :: forall (x :: k) r . (SingKind ('KProxy :: KProxy k)) => SingT x -> (Sing x => Proxy x -> r) -> r
 withSingT (SingT a) k = withSingW a k
+
+singFromProxy :: Sing x => Proxy x -> SingT x 
+singFromProxy Proxy = sing 
 
 data TyRep = TyCtr Symbol [TyRep] 
            | TyPrimNat TL.Nat  -- represents types by constructure and list of arguments; Natural numbers and strings of type level, use type level strings to label tables; Nat = natural numbers
@@ -89,6 +95,25 @@ data instance TyRepSing (x :: [TyRep]) where
   STyNil :: TyRepSing ('[] :: [TyRep])
   STyCons :: !(TyRepSing (x :: TyRep)) -> !(TyRepSing xs) -> TyRepSing (x ': xs) 
 
+cmpTyRepSing_L :: TyRepSing (xs :: [TyRep]) -> TyRepSing (ys :: [TyRep]) -> Ordering 
+cmpTyRepSing_L STyNil STyNil = EQ 
+cmpTyRepSing_L STyNil{} STyCons{} = LT 
+cmpTyRepSing_L STyCons{} STyNil{} = GT 
+cmpTyRepSing_L (STyCons x xs) (STyCons y ys) = 
+  case cmpTyRepSing x y of 
+    EQ -> cmpTyRepSing_L xs ys 
+    q  -> q 
+
+cmpTyRepSing :: TyRepSing (xs :: TyRep) -> TyRepSing (ys :: TyRep) -> Ordering
+cmpTyRepSing (STySym a) (STySym b) = compare (TL.symbolVal a) (TL.symbolVal b)
+cmpTyRepSing (STyNat a) (STyNat b) = compare (TL.natVal a) (TL.natVal b) 
+cmpTyRepSing (STyCtr an av) (STyCtr bn bv) = 
+  case compare (TL.symbolVal an) (TL.symbolVal bn) of 
+    EQ -> cmpTyRepSing_L av bv 
+    q  -> q 
+
+cmpTyRepSing x y = let q z = I# (dataToTag# z) in compare (q x) (q y) 
+
 data instance TyRepSing (x :: TyRep) where 
   STyCtr :: (TL.KnownSymbol nm) => !(Proxy nm) -> !(TyRepSing args) -> TyRepSing ('TyCtr nm args) 
   STySym :: (TL.KnownSymbol nm) => !(Proxy nm) -> TyRepSing ('TyPrimSym nm) 
@@ -108,7 +133,7 @@ eqSymbol :: (TL.KnownSymbol x, TL.KnownSymbol y) => Proxy x -> Proxy y -> DecEq 
 eqSymbol x y = 
   case TL.sameSymbol x y of 
     Just a  -> Yes a
-    Nothing -> No $ mapNeg (\case { Refl -> impossible assert "eqSymbol" () }) triviallyTrue
+    Nothing -> No $ mapNeg (\case { Refl -> impossible "eqSymbol" () }) triviallyTrue
 
 eqProdTypRep :: TyRepSing (xs :: [TyRep]) -> TyRepSing ys -> DecEq xs ys 
 eqProdTypRep STyNil STyNil = Yes Refl
@@ -126,7 +151,7 @@ eqTyRep :: TyRepSing (x :: TyRep) -> TyRepSing y -> DecEq x y
 eqTyRep (STyNat n0) (STyNat n1) =
   case TL.sameNat n0 n1 of 
     Just Refl -> Yes Refl
-    Nothing   -> No $ mapNeg (\case { Refl -> impossible assert "eqTyRep:TyNat" () }) triviallyTrue
+    Nothing   -> No $ mapNeg (\case { Refl -> impossible "eqTyRep:TyNat" () }) triviallyTrue
 
 eqTyRep (STySym n0) (STySym n1) = mapDec (cong Refl) (mapNeg (\case {Refl -> Refl})) $ eqSymbol n0 n1 
 
@@ -149,6 +174,14 @@ eqTyRep (STyNat _) (STySym _) = No $ mapNeg (\case {}) triviallyTrue
 -- Singletons of some kind in terms of their type rep. Using the constructor is safe. 
 data SingT (x :: k) where  
   SingT :: !(SingWitness ('KProxy :: KProxy k) (x :: k) x_rep) -> SingT x -- singleton witnesses for that datatype; accepts value for any representation; construct in a way that invalid values are not possible
+
+cmpSing :: SingKind ('KProxy :: KProxy k) => SingT (x :: k) -> SingT (y :: k) -> Ordering 
+cmpSing (SingT x) (SingT y) = 
+  case (witness x, witness y) of { ((Refl, Dict), (Refl, Dict)) -> 
+  cmpTyRepSing (tyRepOfW x) (tyRepOfW y) } 
+
+instance NFData (SingT x) where 
+  rnf x = x `seq` () 
 
 elimSingT :: SingT x -> (forall xr . SingWitness 'KProxy x xr -> r) -> r  -- x_rep is quantified, universally quantified function, given a sing witness of any representation type returns value r; passing in an arg that scrutinizes is invalid
 elimSingT (SingT x) f = f x  -- exist f is the same as for all types a such that there is a type g to f
@@ -448,6 +481,20 @@ pattern SSymbol x = SingT (WSymbol x)
 type instance TyRepOf (a :: Symbol) = 'TyPrimSym a 
 instance (TL.KnownSymbol a) => WitnessSingI a where witnessSing = WSymbol Proxy 
 
+symbolKindProxy = Proxy :: Proxy ('KProxy :: KProxy Symbol)
+
+compareSymbol' :: SingT (x :: Symbol) -> SingT y -> SingT (TL.CmpSymbol x y)
+compareSymbol' (SingT (WSymbol x)) (SingT (WSymbol y)) = compareSymbol x y  
+
+compareSymbol :: forall x y . (TL.KnownSymbol x, TL.KnownSymbol y) => Proxy x -> Proxy y -> SingT (TL.CmpSymbol x y)
+compareSymbol x y =  
+  let rf :: TL.CmpSymbol x y :~: TL.CmpSymbol x y 
+      rf = Refl 
+  in case compare (TL.symbolVal x) (TL.symbolVal y) of 
+       LT -> case unsafeCoerce rf :: TL.CmpSymbol x y :~: 'LT of { Refl -> SLT }
+       EQ -> case unsafeCoerce rf :: TL.CmpSymbol x y :~: 'EQ of { Refl -> SEQ }
+       GT -> case unsafeCoerce rf :: TL.CmpSymbol x y :~: 'GT of { Refl -> SGT }
+
 -- Nat 
 
 instance SingKind ('KProxy :: KProxy TL.Nat) where 
@@ -462,7 +509,7 @@ instance SingKind ('KProxy :: KProxy TL.Nat) where
   sing2val' (WNat x) = fromIntegral $ TL.natVal x 
   val2sing' _ n k = case TL.someNatVal (fromIntegral n) of 
                      Just (TL.SomeNat x) -> k (WNat x)
-                     Nothing -> impossible assert "negative natural number" () 
+                     Nothing -> impossible "negative natural number" () 
 
 pattern SNat x = SingT (WNat x) 
 

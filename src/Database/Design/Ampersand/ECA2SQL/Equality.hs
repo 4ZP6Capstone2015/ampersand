@@ -19,7 +19,7 @@ import GHC.Exts (Constraint)
 import Data.Type.Equality ((:~:)(..))
 import Control.DeepSeq 
 import Unsafe.Coerce 
-import Database.Design.Ampersand.ECA2SQL.Trace 
+import Database.Design.Ampersand.Basics.Assertion
 
 -- Manipulating equality proofs 
 cong :: f :~: g -> a :~: b -> f a :~: g b 
@@ -64,7 +64,7 @@ triviallyTrue :: Not (Not ())
 triviallyTrue = doubleneg ()  
 
 mapNeg :: (NFData a, NFData b) => (b -> a) -> Not a -> Not b 
-mapNeg f (Not_ q) = Not_ (\x -> q $!! (f $!! x)) 
+mapNeg f (Not_ q) = Not_ $ q `deepseq` (\x -> q (f $!! x)) 
 
 elimNeg :: NFData a => Not a -> a -> Void 
 elimNeg (Not_ f) a = f $!! a
@@ -95,9 +95,6 @@ liftDec2 _ (No p) _ _ no = No (no p)
 dec2bool :: DecEq a b -> Bool
 dec2bool = \case { Yes{} -> True; No{} -> False } 
  
-
-
-
 
 -- for debugging  
 safeCoerce :: String -> a -> b

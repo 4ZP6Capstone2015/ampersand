@@ -49,7 +49,7 @@ library
                      pandoc-types == 1.12.*,
                      parsec == 3.1.*,
                      process == 1.2.*,
-                     simple-sql-parser == 0.4.1,
+                     simple-sql-parser == 0.6.0,
                      split == 0.2.*,
                      SpreadsheetML ==0.1.*,
                      text == 1.2.*,
@@ -60,7 +60,11 @@ library
                      wl-pprint,
                      MissingH,
                      deepseq >= 1.4.0.0,
+<<<<<<< HEAD
                      QuickCheck >= 2.8.0
+=======
+                     ghc-prim >= 0.4.0.0
+>>>>>>> delta_hack
 
   exposed-modules:
                      Database.Design.Ampersand,
@@ -80,6 +84,7 @@ library
                      Database.Design.Ampersand.Basics.UTF8,
                      Database.Design.Ampersand.Basics.Unique,
                      Database.Design.Ampersand.Basics.Version,
+                     Database.Design.Ampersand.Basics.Assertion,
                      Database.Design.Ampersand.Classes,
                      Database.Design.Ampersand.Classes.ConceptStructure,
                      Database.Design.Ampersand.Classes.Relational,
@@ -176,8 +181,10 @@ library
                      Database.Design.Ampersand.ECA2SQL.TSQLCombinators,
                      Database.Design.Ampersand.ECA2SQL.Utils,
                      Database.Design.Ampersand.ECA2SQL.Singletons,
-                     Database.Design.Ampersand.ECA2SQL.PrettyPrinterSQL, 
-                     Database.Design.Ampersand.ECA2SQL.Trace
+                     Database.Design.Ampersand.ECA2SQL.PrettyPrinterSQL,
+                     Database.Design.Ampersand.ECA2SQL.Interpreter ,
+                     Database.Design.Ampersand.ECA2SQL.FreshName 
+
                 
 executable ampersand
   main-is:           Main.hs
@@ -206,7 +213,7 @@ executable ampersand
                      pandoc-types == 1.12.*,
                      parsec == 3.1.*,
                      process == 1.2.*,
-                     simple-sql-parser == 0.4.1,
+                     simple-sql-parser == 0.6.0,
                      split == 0.2.*,
                      SpreadsheetML ==0.1.*,
                      text == 1.2.*,
@@ -236,6 +243,7 @@ executable ampersand
                      Database.Design.Ampersand.Basics.UTF8,
                      Database.Design.Ampersand.Basics.Unique,
                      Database.Design.Ampersand.Basics.Version,
+                     Database.Design.Ampersand.Basics.Assertion,
                      Database.Design.Ampersand.Classes,
                      Database.Design.Ampersand.Classes.ConceptStructure,
                      Database.Design.Ampersand.Classes.Relational,
@@ -349,6 +357,9 @@ Test-Suite ampersand-test
   main-is:           Test.hs
   hs-source-dirs:    src
   default-language:  Haskell2010
+  default-extensions:NamedFieldPuns, RecordWildCards, LambdaCase, PatternSynonyms, EmptyCase, PolyKinds, DataKinds, DefaultSignatures,
+                     GADTs, ConstraintKinds, TypeFamilies, RankNTypes, FlexibleContexts, FlexibleInstances, MultiParamTypeClasses
+                     FunctionalDependencies, TypeOperators
   ghc-options:       -fhpc -with-rtsopts=-M1536m -Wall
   build-depends:     base >= 4.7 && < 5.0,
                      bytestring == 0.10.*,
@@ -365,7 +376,7 @@ Test-Suite ampersand-test
                      pandoc-types == 1.12.*,
                      parsec == 3.1.*,
                      QuickCheck == 2.8.*,
-                     simple-sql-parser == 0.4.1,
+                     simple-sql-parser == 0.6.0,
                      text == 1.2.*,
                      time == 1.5.*,
                      transformers == 0.4.*,

@@ -1,6 +1,6 @@
 {-# LANGUAGE PatternSynonyms, NoMonomorphismRestriction, OverloadedStrings, LambdaCase, EmptyCase #-} 
 {-# LANGUAGE ViewPatterns, ScopedTypeVariables, PolyKinds, UndecidableInstances, DataKinds, DefaultSignatures #-}
-{-# LANGUAGE PartialTypeSignatures, TypeOperators #-} 
+{-# LANGUAGE PartialTypeSignatures, TypeOperators, MagicHash #-} 
 {-# OPTIONS -fno-warn-unticked-promoted-constructors #-} 
 
 -- Various utilities used by ECA2SQL 
@@ -12,6 +12,7 @@ module Database.Design.Ampersand.ECA2SQL.Utils
   , module GHC.Exts
   , module Data.Type.Equality
   , module Database.Design.Ampersand.ECA2SQL.Equality 
+  , module Database.Design.Ampersand.Basics.Assertion
   ) where 
 
 import Control.Applicative 
@@ -26,15 +27,24 @@ import qualified GHC.Exts as Exts
 import Language.SQL.SimpleSQL.Syntax (Name(..))
 import Database.Design.Ampersand.ECA2SQL.Equality 
 import Database.Design.Ampersand.ECA2SQL.Singletons
-import Database.Design.Ampersand.ECA2SQL.Trace 
+import Database.Design.Ampersand.Basics.Assertion (Justification(..), impossible) 
 import Control.DeepSeq
 
-instance IsString Name where fromString = Name 
+-- A newtype whose NFData instance assume that `nf x == rnf x`
+-- for any `x` which is wrapped in the type. 
+newtype WHNFIsNF a = WHNFIsNF a 
+instance NFData (WHNFIsNF a) where 
+  rnf x = x `seq` () 
+
+instance IsString Name where fromString = Name Nothing 
 
 -- Given a functor `f', `Prod f' constructs the n-ary product category of `f'
 data Prod (f :: k -> *) (xs :: [k]) where 
   PNil :: Prod f '[] 
   PCons :: f x -> Prod f xs -> Prod f (x ': xs) 
+
+instance (All (NFData &.> f) xs) => NFData (Prod f xs) where 
+  rnf = foldrProdC (Proxy :: Proxy (NFData &.> f)) () deepseq
 
 prod2sing :: forall xs . (SingKind ('KProxy :: KProxy k)) => Prod SingT (xs :: [k]) -> SingT (xs :: [k])
 prod2sing x0 = SingT (go x0) where 
@@ -68,6 +78,16 @@ foldrProd' :: (forall x xs . f x -> Prod g xs -> Prod g (x ': xs))
 foldrProd' _ PNil = PNil 
 foldrProd' f (PCons x xs) = f x (foldrProd' f xs) 
 
+data Holds c x where Holds :: c x => Holds c x 
+
+foldrProdC :: forall c xs acc f . All c xs => Proxy c -> acc -> (forall q . c q => f q -> acc -> acc) -> Prod f xs -> acc 
+foldrProdC pr z f = foldrProd z (\((Holds :: Holds c q0) :*: b) -> f b) . (zipProd (:*:) (mkProdC pr Holds))
+
+zipProd :: (forall x . f x -> g x -> h x) -> Prod f xs -> Prod g xs -> Prod h xs 
+zipProd _ PNil PNil = PNil 
+zipProd q (PCons x xs) (PCons y ys) = PCons (q x y) (zipProd q xs ys)
+zipProd _ q0 q1 = impossible "zipProd" (WHNFIsNF (q0, q1)) 
+
 foldlProd :: acc -> (forall q . f q -> acc -> acc) -> Prod f xs -> acc 
 foldlProd z _ PNil = z 
 foldlProd z f (PCons x xs) = foldlProd (f x z) f xs 
@@ -86,6 +106,53 @@ someProd (Ex x:xs) = someProd xs #>> Ex . PCons x
 data Sum (f :: k -> *) (xs :: [k]) where 
   SHere :: f x -> Sum f (x ': xs) 
   SThere :: Sum f xs -> Sum f (x ': xs) 
+
+instance All (Ord &.> f) zs => Eq (Sum f zs) where 
+  (==) a b = compare a b == EQ 
+
+instance All (Ord &.> f) zs => Ord (Sum f zs) where 
+  compare = eqSum (mkProdC (Proxy :: Proxy (Ord &.> f)) Holds) where 
+    eqSum :: Prod (Holds (Ord &.> f)) xs -> Sum f xs -> Sum f xs -> Ordering 
+    eqSum PNil x _y = case x of 
+    eqSum (PCons Holds _) (SHere f) (SHere g) = f `compare` g 
+    eqSum (PCons _ ps) (SThere f) (SThere g) = eqSum ps f g 
+    eqSum _ SHere{} SThere{} = LT 
+    eqSum _ SThere{} SHere{} = GT 
+
+mapSumC :: forall c f g xs . (All (c &.> f) xs) => Proxy c -> (forall x . c (f x) => f x -> g x) -> Sum f xs -> Sum g xs 
+mapSumC _ k s0 = go (mkProdC (Proxy :: Proxy (c &.> f)) Holds) s0 where 
+  go :: forall xs0 . Prod (Holds (c &.> f)) xs0 -> Sum f xs0 -> Sum g xs0 
+  go PNil x = case x of {} 
+  go (PCons Holds _) (SHere a) = SHere (k a) 
+  go (PCons _ xs) (SThere a) = SThere $ go xs a 
+
+foldSum :: Sum (K x) xs -> x 
+foldSum (SHere (K x)) = x 
+foldSum (SThere x) = foldSum x 
+
+instance All (Show &.> f) zs => Show (Sum f zs) where 
+  show = foldSum . mapSumC (Proxy :: Proxy Show) (K . show) 
+  
+
+class Member x xs where 
+  inj :: f x -> Sum f xs 
+  prj :: Sum f xs -> Maybe (f x) 
+  isMember :: Sum ((:~:) x) xs 
+
+instance {-# OVERLAPS #-} Member x (x ': xs) where 
+  inj = SHere 
+  prj (SHere x) = Just x 
+  prj SThere{} = Nothing 
+  isMember = SHere Refl 
+
+instance Member x xs => Member x (y ': xs) where 
+  inj = SThere . inj 
+  prj (SThere x) = prj x 
+  prj SHere{} = Nothing 
+  isMember = SThere isMember 
+
+pattern SumElem x <- (prj -> Just x) 
+  where SumElem x = inj x 
 
 -- The constraint `All c xs' holds exactly when `c x' holds for all `x' in `xs'
 class All (c :: k -> Constraint) (xs :: [k]) where   
@@ -107,10 +174,8 @@ type family IsElem (x :: k) (xs :: [k]) :: Constraint where
   IsElem x (y ': xs) = IsElem x xs 
 
 -- Also known as flip 
-data AppliedTo (x :: k) (f :: k -> *) where Ap :: f x -> x `AppliedTo` f 
-
-data Flip (f :: k0 -> k1 -> *) (x :: k1) (y :: k0) where 
-  Flp :: f y x -> Flip f x y
+newtype AppliedTo (x :: k) (f :: k -> *) = Ap (f x) 
+newtype Flip (f :: k0 -> k1 -> *) (x :: k1) (y :: k0) = Flp (f y x)
 
 newtype (:.:) (f :: k1 -> *) (g :: k0 -> k1) x = Cmp { unCmp :: f (g x) }
 data (:*:) (f :: k0 -> *) (g :: k0 -> *) (x :: k0) = (:*:) (f x) (g x)
@@ -127,7 +192,7 @@ type family (&&) (x :: Bool) (y :: Bool) :: Bool where
 SFalse |&& _ = SFalse 
 _ |&& SFalse = SFalse 
 STrue |&& STrue = STrue 
-x |&& y = impossible assert "Bool not {T,F}" (x `seq` y `seq` () )
+x |&& y = impossible  "Bool not {T,F}" (x, y) 
 
 type family And (xs :: [Bool]) :: Bool where 
   And '[] = 'True 
@@ -139,19 +204,6 @@ and_t (SingT (WCons x xs)) = SingT x |&& and_t (SingT xs)
 
 
 -- Symbol 
-symbolKindProxy = Proxy :: Proxy ('KProxy :: KProxy Symbol)
-
-compareSymbol' :: SingT (x :: Symbol) -> SingT y -> SingT (TL.CmpSymbol x y)
-compareSymbol' (SingT (WSymbol x)) (SingT (WSymbol y)) = compareSymbol x y  
-
-compareSymbol :: forall x y . (TL.KnownSymbol x, TL.KnownSymbol y) => Proxy x -> Proxy y -> SingT (TL.CmpSymbol x y)
-compareSymbol x y =  
-  let rf :: TL.CmpSymbol x y :~: TL.CmpSymbol x y 
-      rf = Refl 
-  in case compare (TL.symbolVal x) (TL.symbolVal y) of 
-       LT -> case unsafeCoerce rf :: TL.CmpSymbol x y :~: 'LT of { Refl -> SLT }
-       EQ -> case unsafeCoerce rf :: TL.CmpSymbol x y :~: 'EQ of { Refl -> SEQ }
-       GT -> case unsafeCoerce rf :: TL.CmpSymbol x y :~: 'GT of { Refl -> SGT }
 
 type family RecAssocs (xs :: [RecLabel a b]) :: [b] where 
   RecAssocs '[] = '[] 
@@ -178,7 +230,7 @@ class NotEqual (x :: k) (y :: k) where
   notEqual :: Not (x :~: y)
 
 instance Never => NotEqual x x where notEqual = case is_falsum of 
-instance NotEqual x y where notEqual = mapNeg (\x -> impossible assert "not equal" x) triviallyTrue
+instance NotEqual x y where notEqual = mapNeg (\x -> impossible  "not equal" x) triviallyTrue
 
 neq_is_neq :: Not (x :~: y) -> Dict (NotEqual x y)
 neq_is_neq x = x `seq` unsafeCoerce (Dict :: Dict ())
@@ -192,7 +244,7 @@ type family Never' :: k where
 type Never = (Never' :: Constraint)
 
 is_falsum :: Never => Void 
-is_falsum = impossible assert "is_falsum was called" () 
+is_falsum = impossible  "is_falsum was called" () 
 
 type family IsNotElem (xs :: [k]) (x :: k) :: Constraint where 
   IsNotElem '[] x = () 
@@ -236,9 +288,9 @@ decNotElem (SingT WNil) _ = Yes NotElem_Nil
 decNotElem (SingT (WCons (x :: SingWitness 'KProxy x0 t0) (xs :: SingWitness 'KProxy xs0 ts0))) e = 
   case (decNotElem (SingT xs) e, SingT x %== e) of 
     (Yes p, No q) -> Yes (NotElem_Cons q p) 
-    (No p, _) -> No (mapNeg (\case { NotElem_Cons _ q -> q ; a -> impossible assert "NotElem of (:) is not NotElem_Cons" a }) p) 
+    (No p, _) -> No (mapNeg (\case { NotElem_Cons _ q -> q ; a -> impossible  "NotElem of (:) is not NotElem_Cons" a }) p) 
     (_, Yes Refl) -> No $ mapNeg (\case { (NotElem_Cons p _) -> case elimNeg p Refl of{} 
-                                        ; a -> impossible assert "NotElem of (:) is not NotElem_Cons" a })
+                                        ; a -> impossible  "NotElem of (:) is not NotElem_Cons" a })
                           triviallyTrue 
 
 decSetRec :: forall xs . (SingKind ('KProxy :: KProxy a)) => SingT (xs :: [RecLabel a b]) -> Dec (SetRec xs)
@@ -249,9 +301,9 @@ decSetRec = go (SingT WNil) where
     case (decNotElem seen (SingT wnm), go (SingT (WCons wnm seen')) (SingT xs)) of 
       (Yes p, Yes q) -> Yes (SetRec_Cons p q) 
       (No p, _) -> No (mapNeg (\case { SetRec_Cons x0 _ -> x0
-                                     ; a -> impossible assert "SetRec of a (:) is not SetRec_Cons" (a `seq` ()) }) p) 
+                                     ; a -> impossible "SetRec of a (:) is not SetRec_Cons" a }) p) 
       (_, No p) -> No (mapNeg (\case { SetRec_Cons _ x0 -> x0
-                                     ; a -> impossible assert "SetRec of a (:) is not SetRec_Cons" (a `seq` ()) }) p) 
+                                     ; a -> impossible "SetRec of a (:) is not SetRec_Cons" a }) p) 
 
 type family IsJust (x :: Maybe k) :: k where 
   IsJust ('Just x) = x 
@@ -285,7 +337,7 @@ lookupRec :: forall (xs :: [RecLabel Symbol b]) (nm :: Symbol) (r :: b) . (Looku
 lookupRec row nm = 
   elimSingT (lookupRecM row nm) $ \case 
     WJust r -> SingT r 
-    WNothing -> impossible assert "LookupRec exists but is not Just" () 
+    WNothing -> impossible "LookupRec exists but is not Just" () 
 
 
 -- records to/from lists 
@@ -329,20 +381,26 @@ if_ap (IfA f) (IfA a) = IfA $
 class (x,y) => (&*&) (x :: Constraint) (y :: Constraint) 
 instance (x,y) => x &*& y 
 
+-- Composition of a constraint with a function 
+class (c (f x)) => (&.>) (c :: k' -> Constraint) (f :: k -> k') (x :: k) 
+instance (c (f x)) => (&.>) (c :: k' -> Constraint) (f :: k -> k') (x :: k) 
+
 -- uncurry
 
 class Uncurry f args o r | f args o -> r where 
-  uncurryN :: (Prod f args -> f o) -> r
+  uncurryN :: (Prod f args -> f o) -> r 
+  curryN :: r -> Prod f args -> f o 
 
 instance (f o ~ r) => Uncurry f '[] o r where 
   uncurryN f = f PNil 
+  curryN x PNil = x 
 
 instance (Uncurry f args o r, q ~ (f arg -> r)) => Uncurry f (arg ': args) o q where 
   uncurryN f arg = uncurryN (f . PCons arg) 
+  curryN f (PCons x xs) = curryN (f x) xs 
 
 -- fresh names
 
 freshName :: String -> Int -> String 
 freshName nm count = nm ++ show count
-
 

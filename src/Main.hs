@@ -35,8 +35,6 @@ main =
                                   generateAmpersandOutput  fSpec
                                   generateProtoStuff       fSpec
 
-
-
 {-
 :main -I ../ampersand-models/Examples/ProjectAdministration -o ../ampersand-models/Examples/ProjectAdministration ProjectAdministration.adl --print-eca-info
 -}

@@ -31,7 +31,7 @@ import Data.Type.Equality ((:~:)(..))
 import Unsafe.Coerce 
 import Data.Function (fix) 
 import Database.Design.Ampersand.ECA2SQL.Utils 
-import Database.Design.Ampersand.ECA2SQL.Trace 
+import Database.Design.Ampersand.Basics.Assertion
 import Database.Design.Ampersand.ECA2SQL.Singletons
 
 -- Basic model SQL types represented in Haskell 
@@ -82,6 +82,10 @@ instance SingKind ('KProxy :: KProxy SQLType) where
   withSingW (WSQLRel x) k = withSingW x $ const $ k Proxy 
   withSingW (WSQLRow x) k = withSingW x $ const $ k Proxy 
   withSingW (WSQLVec x) k = withSingW x $ const $ k Proxy 
+
+  witness = error "SingKind{SQLType}: TODO - witness" 
+  sing2val' = error "SingKind{SQLType}: TODO - sing2val" 
+  val2sing' = error "SingKind{SQLType}: TODO - val2sing" 
 
   data SingWitness ('KProxy :: KProxy SQLType) x args where
     WSQLAtom :: SingWitness 'KProxy 'SQLAtom    ( 'TyCtr "SQLType_SQLAtom" '[] )
@@ -142,7 +146,7 @@ data SQLValSem (x :: SQLRefType) where
   Unit :: SQLValSem 'SQLUnit
   Method_ :: (Sing args, Sing out) => Name -> SQLValSem ('SQLMethod args out) 
   Ref_ :: Sing x => Name -> SQLValSem ('SQLRef x) 
-  Val :: SQLVal x -> SQLValSem ('Ty x) 
+  Val :: { valOfValSem :: SQLVal x } -> SQLValSem ('Ty x) 
 
 -- Pattern match only (no constructor syntax). These permit access (but not the
 -- ability to construct) to the underlying untyped representation. 
@@ -154,7 +158,7 @@ pattern GetRef x <- Ref_ x
 typeOfSem :: (f `IsElem` '[ 'SQLRef, 'Ty ]) => SQLValSem (f x) -> SQLTypeS x 
 typeOfSem Ref_{} = sing 
 typeOfSem (Val x) = typeOf x 
-typeOfSem x = impossible assert "A SQLVal{Ref/Ty} was not a {Ref/Val}" (x `seq` ())
+typeOfSem x = impossible  "A SQLVal{Ref/Ty} was not a {Ref/Val}" (WHNFIsNF x) 
 
 -- Get the columns of a sql row.   
 colsOf :: SingT ('SQLRow xs) -> SingT xs
@@ -200,7 +204,7 @@ typeOfTableSpec t = t `seq`
       q t' = 
         case t' of 
           (MkTableSpec (typeOfSem -> SingT (WSQLRel (WSQLRow _)))) -> Dict 
-          (TableAlias_ _ _) -> q t' 
+          (TableAlias_ _ _) -> error "TODO" -- q t' 
 
   in case typeOfTableSpec' t of { SingT x -> case q t of { Dict -> SingT (WSQLRow x) } }
 
@@ -208,21 +212,21 @@ typeOfTableSpec' :: TableSpec t -> SingT t
 typeOfTableSpec' (MkTableSpec x) = 
   case typeOfSem x of 
     SingT (WSQLRel (WSQLRow t)) -> SingT t
-    q -> impossible assert "Type of a table not (Rel (Row x)) f.s. x" (q `seq` ())
+    q -> impossible "Type of a table not (Rel (Row x)) f.s. x" q
 
 typeOfTableSpec' (TableAlias_ nms t') = tr nms $ recAssocs $ typeOfTableSpec' t' where 
   tr :: SingT newNames -> SingT xs -> SingT (ZipRec newNames xs) 
   tr (SingT WNil) (SingT WNil) = SingT WNil 
   tr (SingT (WCons x xs)) (SingT (WCons y ys)) = 
     case tr (SingT xs) (SingT ys) of { SingT rs -> SingT (WCons (WRecLabel x y) rs) }
-  tr (SingT WCons{}) (SingT WNil) = impossible assert "ZipRec exists but is not defined" () 
-  tr (SingT WNil{}) (SingT WCons{}) = impossible assert "ZipRec exists but is not defined" () 
+  tr (SingT WCons{}) (SingT WNil) = impossible  "ZipRec exists but is not defined" () 
+  tr (SingT WNil{}) (SingT WCons{}) = impossible  "ZipRec exists but is not defined" () 
 
 -- Safely create a table spec. 
 tableSpec :: (IsSetRec x, NonEmpty x) => Name -> SingT x -> TableSpec x 
 tableSpec tn xs@(SingT x) = 
   case x of 
-    WNil -> impossible assert "NonEmpty exists but given type is the empty list" () 
+    WNil -> impossible  "NonEmpty exists but given type is the empty list" () 
     WCons{} -> MkTableSpec $ withSingT xs $ \_ -> Ref_ tn 
 
 -- Can return nothing if the set of names is not valid 
@@ -248,12 +252,6 @@ tableSpec' nm0 tys0 k0 =
          Just (Refl, SingT rs) -> 
            case TL.someSymbolVal nm of 
              TL.SomeSymbol nmTy -> k (Just (Refl, SingT (WCons (WRecLabel (WSymbol nmTy) x) rs ) )) 
-
--- k (Just (_ {-Refl-}, _)) -- SingT (WSQLRow (WCons (WRecLabel _ x) rs)) ))
-
-
-               -- case SingT (WSymbol nmTy) %== e of 
-               --   SingT False -> 
 
 -- Create an table spec from runtime information. Returns Nothing if the table
 -- would not be valid. 
