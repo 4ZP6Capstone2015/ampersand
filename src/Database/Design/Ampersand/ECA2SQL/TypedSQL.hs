@@ -32,6 +32,7 @@ import Unsafe.Coerce
 import Data.Function (fix) 
 import Database.Design.Ampersand.ECA2SQL.Utils 
 import Database.Design.Ampersand.Basics.Assertion
+import Database.Design.Ampersand.Basics.Version 
 import Database.Design.Ampersand.ECA2SQL.Singletons
 
 -- Basic model SQL types represented in Haskell 
@@ -83,7 +84,12 @@ instance SingKind ('KProxy :: KProxy SQLType) where
   withSingW (WSQLRow x) k = withSingW x $ const $ k Proxy 
   withSingW (WSQLVec x) k = withSingW x $ const $ k Proxy 
 
-  witness = error "SingKind{SQLType}: TODO - witness" 
+  witness WSQLAtom = (Refl, Dict) 
+  witness WSQLBool = (Refl, Dict) 
+  witness (WSQLRel a) = case witness a of { (Refl, Dict) -> (Refl, Dict) } 
+  witness (WSQLRow a) = case witness a of { (Refl, Dict) -> (Refl, Dict) } 
+  witness (WSQLVec a) = case witness a of { (Refl, Dict) -> (Refl, Dict) } 
+
   sing2val' = error "SingKind{SQLType}: TODO - sing2val" 
   val2sing' = error "SingKind{SQLType}: TODO - val2sing" 
 
@@ -204,7 +210,7 @@ typeOfTableSpec t = t `seq`
       q t' = 
         case t' of 
           (MkTableSpec (typeOfSem -> SingT (WSQLRel (WSQLRow _)))) -> Dict 
-          (TableAlias_ _ _) -> error "TODO" -- q t' 
+          (TableAlias_ _ _) -> fatal 0 "TODO: typeOfTableSpec - TableAlias not yet handled"
 
   in case typeOfTableSpec' t of { SingT x -> case q t of { Dict -> SingT (WSQLRow x) } }
 

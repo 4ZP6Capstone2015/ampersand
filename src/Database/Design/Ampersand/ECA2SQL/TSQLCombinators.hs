@@ -55,7 +55,7 @@ instance IndexInto ('SQLRow xs) ('KProxy :: KProxy Symbol) where
                    , qeFrom          = [ Sm.TRQueryExpr x ]
                    } 
      }}
-  (!) x y = impossible  "" (x, y)
+  (!) x y = impossible  "" (WHNFIsNF (x, y))
 
 instance IndexInto ('SQLRel ('SQLRow xs)) ('KProxy :: KProxy Symbol) where 
   type GetAtIndex ('SQLRel ('SQLRow xs)) (nm :: Symbol) = 'SQLRel (LookupRec xs nm)

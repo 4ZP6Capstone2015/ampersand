@@ -24,9 +24,10 @@ instance IsString Doc where
 
 
 eca2PrettySQL :: FSpec -> ECArule -> Doc 
-eca2PrettySQL fs eca = pretty (nm, eca2SQL fs eca)
-  where nm = "ecaRule" ++ show (ecaNum eca)
-      
+eca2PrettySQL fs eca = 
+  eca2SQL fs eca $ \res -> 
+    let nm = "ecaRule" ++ show (ecaNum eca)
+    in pretty (nm, res)      
 
 instance {-# OVERLAPPABLE #-} (x ~ String) => Pretty (x, SQLMethod args out) where
   pretty (paramName, SQLMethodWithFormalParams params mthd) =     
@@ -132,8 +133,6 @@ prettySQLFromClause = prettySQLAtoB
 
 
 
--- ifSQLfun :: SQLVal 'SQLBool -> Doc
--- ifSQLfun = error "TODO"
 
 -- testing () = failure 
 --[TODO PART BELOW]

@@ -1,6 +1,6 @@
 \begin{code}
 
-{-# LANGUAGE StandaloneDeriving, TupleSections, GeneralizedNewtypeDeriving, UndecidableInstances, DefaultSignatures #-} 
+{-# LANGUAGE ScopedTypeVariables, StandaloneDeriving, TupleSections, GeneralizedNewtypeDeriving, UndecidableInstances, DefaultSignatures #-} 
 
 module Database.Design.Ampersand.ECA2SQL.FreshName where 
 

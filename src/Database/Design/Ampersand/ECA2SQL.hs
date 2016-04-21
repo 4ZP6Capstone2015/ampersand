@@ -30,27 +30,21 @@ import qualified Database.Design.Ampersand.ECA2SQL.TSQLCombinators as T
 import qualified GHC.TypeLits as TL 
 import Database.Design.Ampersand.ECA2SQL.Singletons
 
--- Convert a declaration to a table specification.
--- Based on Database.Design.Ampersand.FSpec.SQL.selectDeclaration
-
--- decl2TableSpec :: FSpec -> Declaration 
---                -> (forall k i j . TableSpec k -> i `Elem` k -> j `Elem` k -> r) 
---                -> r 
--- decl2TableSpec fSpec decl k = 
---   case getDeclarationTableInfo fSpec decl of 
---     (plug, srcAtt, tgtAtt) -> 
---       case plug of 
---         TblSQL{} -> undefined
---         BinSQL{} -> undefined
---         ScalarSQL{} -> impossible "ScalarSQL unexecpted here" () 
-
 
 unsafeMkInsDelAtom :: FSpec -> Declaration -> InsDel -> Expression -> SQLStatement 'SQLUnit 
-unsafeMkInsDelAtom fSpec decl =
-  case getDeclarationTableInfo fSpec decl of 
-    (plug, srcAtt, tgtAtt) ->  
+unsafeMkInsDelAtom fSpec decl = go (getDeclarationTableInfo fSpec decl)
+ where 
+  go (plug, srcAtt, tgtAtt) = 
       case plug of 
         TblSQL{} -> fatal 0 "TblSQL currently unsupported in ECA2SQL" 
+        -- TblSQL{} -> go 
+        --             (BinSQL { sqlname = sqlname plug
+        --                     , cLkpTbl = cLkpTbl plug 
+        --                     , mLkp    = e0 
+        --                     , columns = (c0, c1) 
+        --                     } 
+        --             , c0, c1 ) where ((e0, c0, c1):_) = mLkpTbl plug 
+
         BinSQL{} -> 
           case someTableSpec (fromString $ sqlname plug) 
                  [ (fromString $ attName srcAtt, Ex (sing :: SQLTypeS 'SQLAtom)) 
@@ -85,7 +79,8 @@ unsafeMkInsDelAtom fSpec decl =
         ScalarSQL{} -> fatal 0 "ScalarSQL unexecpted here" 
     
 unsafeDeclToTbl :: FSpec -> Declaration -> (forall (xs :: [SQLType]) . Prod SingT xs -> r) -> r 
-unsafeDeclToTbl = error "TODO"  
+unsafeDeclToTbl _fSpec _decl k = k (SingT WSQLAtom :> SingT WSQLAtom :> PNil) 
+  -- TODO - maybe not right 
 
 prod2VectorQuery :: Prod (SQLValSem :.: 'SQLRef) xs -> QueryExpr 
 prod2VectorQuery = 
@@ -152,7 +147,7 @@ eca2SQL fSpec@FSpec{plugInfos=_plugInfos} (ECA (On _insDel _ruleDecl) delta acti
                      ) doPs
                  ) fin ps 
       
-        paClause2SQL _ = error "paClause2SQL: unsupported operation" 
+        paClause2SQL x = error $ "paClause2SQL: unsupported operation: " ++ show x 
     in 
       NewRef sing (Just "checkDone") (Just T.false) :>>= \checkDone -> 
       paClause2SQL action checkDone :>>= \_ -> 

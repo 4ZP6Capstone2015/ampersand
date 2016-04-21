@@ -220,7 +220,10 @@ executable ampersand
                      zlib == 0.5.*,
                      MissingH == 1.3.*,
                      deepseq >= 1.4.0.0,
-                     wl-pprint >= 1.2
+                     wl-pprint >= 1.2,
+                     QuickCheck >= 2.8.0,
+                     ghc-prim >= 0.4.0.0
+
 
   other-modules:
                      Database.Design.Ampersand,
