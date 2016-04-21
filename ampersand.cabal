@@ -59,7 +59,8 @@ library
                      zlib == 0.5.*,
                      wl-pprint,
                      MissingH,
-                     deepseq >= 1.4.0.0 
+                     deepseq >= 1.4.0.0,
+                     ghc-prim >= 0.4.0.0
 
   exposed-modules:
                      Database.Design.Ampersand,
@@ -176,7 +177,9 @@ library
                      Database.Design.Ampersand.ECA2SQL.TSQLCombinators,
                      Database.Design.Ampersand.ECA2SQL.Utils,
                      Database.Design.Ampersand.ECA2SQL.Singletons,
-                     Database.Design.Ampersand.ECA2SQL.PrettyPrinterSQL
+                     Database.Design.Ampersand.ECA2SQL.PrettyPrinterSQL,
+                     Database.Design.Ampersand.ECA2SQL.Interpreter ,
+                     Database.Design.Ampersand.ECA2SQL.FreshName 
 
                 
 executable ampersand

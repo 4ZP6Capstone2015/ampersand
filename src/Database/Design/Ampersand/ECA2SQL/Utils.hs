@@ -1,6 +1,6 @@
 {-# LANGUAGE PatternSynonyms, NoMonomorphismRestriction, OverloadedStrings, LambdaCase, EmptyCase #-} 
 {-# LANGUAGE ViewPatterns, ScopedTypeVariables, PolyKinds, UndecidableInstances, DataKinds, DefaultSignatures #-}
-{-# LANGUAGE PartialTypeSignatures, TypeOperators #-} 
+{-# LANGUAGE PartialTypeSignatures, TypeOperators, MagicHash #-} 
 {-# OPTIONS -fno-warn-unticked-promoted-constructors #-} 
 
 -- Various utilities used by ECA2SQL 
@@ -107,6 +107,38 @@ data Sum (f :: k -> *) (xs :: [k]) where
   SHere :: f x -> Sum f (x ': xs) 
   SThere :: Sum f xs -> Sum f (x ': xs) 
 
+instance All (Ord &.> f) zs => Eq (Sum f zs) where 
+  (==) a b = compare a b == EQ 
+
+instance All (Ord &.> f) zs => Ord (Sum f zs) where 
+  compare = eqSum (mkProdC (Proxy :: Proxy (Ord &.> f)) Holds) where 
+    eqSum :: Prod (Holds (Ord &.> f)) xs -> Sum f xs -> Sum f xs -> Ordering 
+    eqSum PNil x _y = case x of 
+    eqSum (PCons Holds _) (SHere f) (SHere g) = f `compare` g 
+    eqSum (PCons _ ps) (SThere f) (SThere g) = eqSum ps f g 
+    eqSum _ SHere{} SThere{} = LT 
+    eqSum _ SThere{} SHere{} = GT 
+
+class Member x xs where 
+  inj :: f x -> Sum f xs 
+  prj :: Sum f xs -> Maybe (f x) 
+  isMember :: Sum ((:~:) x) xs 
+
+instance {-# OVERLAPS #-} Member x (x ': xs) where 
+  inj = SHere 
+  prj (SHere x) = Just x 
+  prj SThere{} = Nothing 
+  isMember = SHere Refl 
+
+instance Member x xs => Member x (y ': xs) where 
+  inj = SThere . inj 
+  prj (SThere x) = prj x 
+  prj SHere{} = Nothing 
+  isMember = SThere isMember 
+
+pattern SumElem x <- (prj -> Just x) 
+  where SumElem x = inj x 
+
 -- The constraint `All c xs' holds exactly when `c x' holds for all `x' in `xs'
 class All (c :: k -> Constraint) (xs :: [k]) where   
   mkProdC :: Proxy c -> (forall a . c a => p a) -> Prod p xs 
@@ -127,10 +159,8 @@ type family IsElem (x :: k) (xs :: [k]) :: Constraint where
   IsElem x (y ': xs) = IsElem x xs 
 
 -- Also known as flip 
-data AppliedTo (x :: k) (f :: k -> *) where Ap :: f x -> x `AppliedTo` f 
-
-data Flip (f :: k0 -> k1 -> *) (x :: k1) (y :: k0) where 
-  Flp :: f y x -> Flip f x y
+newtype AppliedTo (x :: k) (f :: k -> *) = Ap (f x) 
+newtype Flip (f :: k0 -> k1 -> *) (x :: k1) (y :: k0) = Flp (f y x)
 
 newtype (:.:) (f :: k1 -> *) (g :: k0 -> k1) x = Cmp { unCmp :: f (g x) }
 data (:*:) (f :: k0 -> *) (g :: k0 -> *) (x :: k0) = (:*:) (f x) (g x)
@@ -159,19 +189,6 @@ and_t (SingT (WCons x xs)) = SingT x |&& and_t (SingT xs)
 
 
 -- Symbol 
-symbolKindProxy = Proxy :: Proxy ('KProxy :: KProxy Symbol)
-
-compareSymbol' :: SingT (x :: Symbol) -> SingT y -> SingT (TL.CmpSymbol x y)
-compareSymbol' (SingT (WSymbol x)) (SingT (WSymbol y)) = compareSymbol x y  
-
-compareSymbol :: forall x y . (TL.KnownSymbol x, TL.KnownSymbol y) => Proxy x -> Proxy y -> SingT (TL.CmpSymbol x y)
-compareSymbol x y =  
-  let rf :: TL.CmpSymbol x y :~: TL.CmpSymbol x y 
-      rf = Refl 
-  in case compare (TL.symbolVal x) (TL.symbolVal y) of 
-       LT -> case unsafeCoerce rf :: TL.CmpSymbol x y :~: 'LT of { Refl -> SLT }
-       EQ -> case unsafeCoerce rf :: TL.CmpSymbol x y :~: 'EQ of { Refl -> SEQ }
-       GT -> case unsafeCoerce rf :: TL.CmpSymbol x y :~: 'GT of { Refl -> SGT }
 
 type family RecAssocs (xs :: [RecLabel a b]) :: [b] where 
   RecAssocs '[] = '[] 
@@ -371,3 +388,4 @@ instance (Uncurry f args o r, q ~ (f arg -> r)) => Uncurry f (arg ': args) o q w
 
 freshName :: String -> Int -> String 
 freshName nm count = nm ++ show count
+

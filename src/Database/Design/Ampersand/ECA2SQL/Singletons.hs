@@ -1,6 +1,6 @@
 {-# LANGUAGE PatternSynonyms, NoMonomorphismRestriction, OverloadedStrings, LambdaCase, EmptyCase #-} 
 {-# LANGUAGE TemplateHaskell, QuasiQuotes, ScopedTypeVariables, PolyKinds, UndecidableInstances, DataKinds, DefaultSignatures #-}
-{-# LANGUAGE PartialTypeSignatures, TypeOperators #-} 
+{-# LANGUAGE PartialTypeSignatures, TypeOperators, MagicHash #-} 
 {-# OPTIONS -fno-warn-unticked-promoted-constructors #-} 
 
 {-# OPTIONS_GHC -fno-cse #-}
@@ -14,10 +14,13 @@ import Unsafe.Coerce
 import Data.Proxy (Proxy(..), KProxy(..))
 import GHC.TypeLits (Symbol, symbolVal, sameSymbol, KnownSymbol)
 import qualified GHC.TypeLits as TL  
-import Database.Design.Ampersand.ECA2SQL.Equality 
+import Database.Design.Ampersand.ECA2SQL.Equality
 import Database.Design.Ampersand.Basics.Assertion
 import Numeric.Natural
 import Control.DeepSeq
+import GHC.Types(Int(..))
+import GHC.Prim (dataToTag#)
+import Data.Function (on) 
 
 -- test
 
@@ -91,6 +94,25 @@ data instance TyRepSing (x :: [TyRep]) where
   STyNil :: TyRepSing ('[] :: [TyRep])
   STyCons :: !(TyRepSing (x :: TyRep)) -> !(TyRepSing xs) -> TyRepSing (x ': xs) 
 
+cmpTyRepSing_L :: TyRepSing (xs :: [TyRep]) -> TyRepSing (ys :: [TyRep]) -> Ordering 
+cmpTyRepSing_L STyNil STyNil = EQ 
+cmpTyRepSing_L STyNil{} STyCons{} = LT 
+cmpTyRepSing_L STyCons{} STyNil{} = GT 
+cmpTyRepSing_L (STyCons x xs) (STyCons y ys) = 
+  case cmpTyRepSing x y of 
+    EQ -> cmpTyRepSing_L xs ys 
+    q  -> q 
+
+cmpTyRepSing :: TyRepSing (xs :: TyRep) -> TyRepSing (ys :: TyRep) -> Ordering
+cmpTyRepSing (STySym a) (STySym b) = compare (TL.symbolVal a) (TL.symbolVal b)
+cmpTyRepSing (STyNat a) (STyNat b) = compare (TL.natVal a) (TL.natVal b) 
+cmpTyRepSing (STyCtr an av) (STyCtr bn bv) = 
+  case compare (TL.symbolVal an) (TL.symbolVal bn) of 
+    EQ -> cmpTyRepSing_L av bv 
+    q  -> q 
+
+cmpTyRepSing x y = let q z = I# (dataToTag# z) in compare (q x) (q y) 
+
 data instance TyRepSing (x :: TyRep) where 
   STyCtr :: (TL.KnownSymbol nm) => !(Proxy nm) -> !(TyRepSing args) -> TyRepSing ('TyCtr nm args) 
   STySym :: (TL.KnownSymbol nm) => !(Proxy nm) -> TyRepSing ('TyPrimSym nm) 
@@ -151,6 +173,11 @@ eqTyRep (STyNat _) (STySym _) = No $ mapNeg (\case {}) triviallyTrue
 -- Singletons of some kind in terms of their type rep. Using the constructor is safe. 
 data SingT (x :: k) where  
   SingT :: !(SingWitness ('KProxy :: KProxy k) (x :: k) x_rep) -> SingT x -- singleton witnesses for that datatype; accepts value for any representation; construct in a way that invalid values are not possible
+
+cmpSing :: SingKind ('KProxy :: KProxy k) => SingT (x :: k) -> SingT (y :: k) -> Ordering 
+cmpSing (SingT x) (SingT y) = 
+  case (witness x, witness y) of { ((Refl, Dict), (Refl, Dict)) -> 
+  cmpTyRepSing (tyRepOfW x) (tyRepOfW y) } 
 
 instance NFData (SingT x) where 
   rnf x = x `seq` () 
@@ -422,6 +449,20 @@ pattern SSymbol x = SingT (WSymbol x)
 
 type instance TyRepOf (a :: Symbol) = 'TyPrimSym a 
 instance (TL.KnownSymbol a) => WitnessSingI a where witnessSing = WSymbol Proxy 
+
+symbolKindProxy = Proxy :: Proxy ('KProxy :: KProxy Symbol)
+
+compareSymbol' :: SingT (x :: Symbol) -> SingT y -> SingT (TL.CmpSymbol x y)
+compareSymbol' (SingT (WSymbol x)) (SingT (WSymbol y)) = compareSymbol x y  
+
+compareSymbol :: forall x y . (TL.KnownSymbol x, TL.KnownSymbol y) => Proxy x -> Proxy y -> SingT (TL.CmpSymbol x y)
+compareSymbol x y =  
+  let rf :: TL.CmpSymbol x y :~: TL.CmpSymbol x y 
+      rf = Refl 
+  in case compare (TL.symbolVal x) (TL.symbolVal y) of 
+       LT -> case unsafeCoerce rf :: TL.CmpSymbol x y :~: 'LT of { Refl -> SLT }
+       EQ -> case unsafeCoerce rf :: TL.CmpSymbol x y :~: 'EQ of { Refl -> SEQ }
+       GT -> case unsafeCoerce rf :: TL.CmpSymbol x y :~: 'GT of { Refl -> SGT }
 
 -- Nat 
 
