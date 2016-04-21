@@ -119,6 +119,21 @@ instance All (Ord &.> f) zs => Ord (Sum f zs) where
     eqSum _ SHere{} SThere{} = LT 
     eqSum _ SThere{} SHere{} = GT 
 
+mapSumC :: forall c f g xs . (All (c &.> f) xs) => Proxy c -> (forall x . c (f x) => f x -> g x) -> Sum f xs -> Sum g xs 
+mapSumC _ k s0 = go (mkProdC (Proxy :: Proxy (c &.> f)) Holds) s0 where 
+  go :: forall xs0 . Prod (Holds (c &.> f)) xs0 -> Sum f xs0 -> Sum g xs0 
+  go PNil x = case x of {} 
+  go (PCons Holds _) (SHere a) = SHere (k a) 
+  go (PCons _ xs) (SThere a) = SThere $ go xs a 
+
+foldSum :: Sum (K x) xs -> x 
+foldSum (SHere (K x)) = x 
+foldSum (SThere x) = foldSum x 
+
+instance All (Show &.> f) zs => Show (Sum f zs) where 
+  show = foldSum . mapSumC (Proxy :: Proxy Show) (K . show) 
+  
+
 class Member x xs where 
   inj :: f x -> Sum f xs 
   prj :: Sum f xs -> Maybe (f x) 
