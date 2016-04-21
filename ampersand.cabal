@@ -60,11 +60,8 @@ library
                      wl-pprint,
                      MissingH,
                      deepseq >= 1.4.0.0,
-<<<<<<< HEAD
-                     QuickCheck >= 2.8.0
-=======
+                     QuickCheck >= 2.8.0,
                      ghc-prim >= 0.4.0.0
->>>>>>> delta_hack
 
   exposed-modules:
                      Database.Design.Ampersand,
