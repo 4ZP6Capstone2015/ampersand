@@ -339,19 +339,6 @@ executable ampersand
                      Database.Design.Ampersand.ECA2SQL.PrettyPrinterSQL
 
 
-executable testECA
-  main-is:           Database/Design/Ampersand/ECA2SQL/ECATest.hs
-  hs-source-dirs:    src
-  default-language:  Haskell2010
-  -- default-extensions:NamedFieldPuns, RecordWildCards
-  default-extensions:NamedFieldPuns, RecordWildCards, LambdaCase, PatternSynonyms, EmptyCase, PolyKinds, DataKinds, DefaultSignatures,
-                     GADTs, ConstraintKinds, TypeFamilies, RankNTypes, FlexibleContexts, FlexibleInstances, MultiParamTypeClasses
-                     FunctionalDependencies, TypeOperators
-  ghc-options:       -rtsopts -Wall
-  build-depends:     ampersand == 3.3.0,
-                     base >= 4.7 && < 5.0,
-                     QuickCheck == 2.8.*
-
 Test-Suite ampersand-test
   type:              exitcode-stdio-1.0
   main-is:           Test.hs
@@ -384,8 +371,7 @@ Test-Suite ampersand-test
                      wl-pprint == 1.2.*,
                      xlsx == 0.2.*,
                      zlib == 0.5.*
-  other-modules:
-                     Database.Design.Ampersand.Misc.Options,
+  other-modules:     Database.Design.Ampersand.Misc.Options,
                      Database.Design.Ampersand.Test.Parser.ArbitraryPandoc,
                      Database.Design.Ampersand.Test.Parser.ArbitraryTree,
                      Database.Design.Ampersand.Test.Parser.ParserTest,
