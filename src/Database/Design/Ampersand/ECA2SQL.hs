@@ -31,52 +31,9 @@ import qualified GHC.TypeLits as TL
 import Database.Design.Ampersand.ECA2SQL.Singletons
 
 
-unsafeMkInsDelAtom :: FSpec -> Declaration -> InsDel -> Expression -> SQLStatement 'SQLUnit 
-unsafeMkInsDelAtom fSpec decl = go (getDeclarationTableInfo fSpec decl)
- where 
-  go (plug, srcAtt, tgtAtt) = 
-      case plug of 
-        TblSQL{} -> fatal 0 "TblSQL currently unsupported in ECA2SQL" 
-        -- TblSQL{} -> go 
-        --             (BinSQL { sqlname = sqlname plug
-        --                     , cLkpTbl = cLkpTbl plug 
-        --                     , mLkp    = e0 
-        --                     , columns = (c0, c1) 
-        --                     } 
-        --             , c0, c1 ) where ((e0, c0, c1):_) = mLkpTbl plug 
 
-        BinSQL{} -> 
-          case someTableSpec (fromString $ sqlname plug) 
-                 [ (fromString $ attName srcAtt, Ex (sing :: SQLTypeS 'SQLAtom)) 
-                 , (fromString $ attName tgtAtt, Ex (sing :: SQLTypeS 'SQLAtom)) 
-                 ] of 
-            Nothing -> fatal 0 $ unwords 
-                        [ "Could not construct table spec from attributes\n", 
-                        show srcAtt, " and ", show tgtAtt ] 
-            Just (Ex (tbl :: TableSpec tbl)) -> \act toInsDel -> 
-              case act of 
-                Ins -> withSingT (typeOfTableSpec tbl) $ \(singFromProxy -> SingT (WSQLRow{})) -> 
-                         Insert tbl (unsafeSQLValFromQuery $ expr2SQL fSpec toInsDel)
-                         
-                Del -> 
-                  let toDelExpr :: SQLVal ('SQLRel ('SQLRow '[ "src" ::: 'SQLAtom, "tgt" ::: 'SQLAtom ] ))
-                      toDelExpr = unsafeSQLValFromQuery $ expr2SQL fSpec toInsDel
-                      src = sing :: SingT "src" 
-                      tgt = sing :: SingT "tgt" 
-                      dom = toDelExpr T.! src 
-                      cod = toDelExpr T.! tgt 
-
-                      cond :: SQLVal ('SQLRow '[ "src" ::: 'SQLAtom, "tgt" ::: 'SQLAtom ] ) -> SQLVal 'SQLBool 
-                      cond = \tup -> T.sql T.And (T.in_ (tup T.! src) dom) (T.in_ (tup T.! tgt) cod)
-
-                      -- Unsafely recasting the type of `cond' 
-                      cond' :: SQLVal ('SQLRow tbl) -> SQLVal 'SQLBool 
-                      cond' = \(SQLQueryVal x) -> cond (SQLQueryVal x) 
-
-                  in Delete tbl cond' 
                       
 
-        ScalarSQL{} -> fatal 0 "ScalarSQL unexecpted here" 
     
 unsafeDeclToTbl :: FSpec -> Declaration -> (forall (xs :: [SQLType]) . Prod SingT xs -> r) -> r 
 unsafeDeclToTbl _fSpec _decl k = k (SingT WSQLAtom :> SingT WSQLAtom :> PNil) 
@@ -98,7 +55,63 @@ eca2SQL fSpec@FSpec{plugInfos=_plugInfos} (ECA (On _insDel _ruleDecl) delta acti
     let expr2SQL' = FSpec.expr2SQL' (\case 
                       d | d == delta -> Just (prod2VectorQuery _args)  
                       _ -> Nothing
-                      ) fSpec             
+                      ) fSpec         
+
+        unsafeMkInsDelAtom :: Declaration -> InsDel -> Expression -> SQLStatement 'SQLUnit 
+        unsafeMkInsDelAtom decl = go (getDeclarationTableInfo fSpec decl)
+         where 
+          go (plug, srcAtt', tgtAtt') = 
+           let (srcAtt, tgtAtt) = if srcAtt' == tgtAtt' 
+                                    then ( srcAtt' { attName = "Src" ++ attName srcAtt' } 
+                                         , tgtAtt' { attName = "Tgt" ++ attName srcAtt' } 
+                                         )
+                                    else (srcAtt', tgtAtt') 
+        
+           in 
+              case plug of 
+                ScalarSQL{} -> fatal 0 "ScalarSQL unexecpted here" 
+                -- TblSQL{} -> fatal 0 "TblSQL currently unsupported in ECA2SQL" 
+                -- TblSQL{} -> go 
+                --             (BinSQL { sqlname = sqlname plug
+                --                     , cLkpTbl = cLkpTbl plug 
+                --                     , mLkp    = e0 
+                --                     , columns = (c0, c1) 
+                --                     } 
+                --             , c0, c1 ) where ((e0, c0, c1):_) = mLkpTbl plug 
+        
+                -- BinSQL{} -> 
+                _ -> 
+                  case someTableSpec (fromString $ sqlname plug) 
+                         [ (fromString $ attName srcAtt, Ex (sing :: SQLTypeS 'SQLAtom)) 
+                         , (fromString $ attName tgtAtt, Ex (sing :: SQLTypeS 'SQLAtom)) 
+                         ] of 
+                    Nothing -> fatal 0 $ unwords 
+                                [ "Could not construct table spec from attributes\n", 
+                                show srcAtt, " and ", show tgtAtt ] 
+                    Just (Ex (tbl :: TableSpec tbl)) -> \act toInsDel -> 
+                      case act of 
+                        Ins -> withSingT (typeOfTableSpec tbl) $ \(singFromProxy -> SingT (WSQLRow{})) -> 
+                                 Insert tbl (unsafeSQLValFromQuery $ expr2SQL' toInsDel)
+                                 
+                        Del -> 
+                          let toDelExpr :: SQLVal ('SQLRel ('SQLRow '[ "src" ::: 'SQLAtom, "tgt" ::: 'SQLAtom ] ))
+                              toDelExpr = unsafeSQLValFromQuery $ expr2SQL' toInsDel
+                              src = sing :: SingT "src" 
+                              tgt = sing :: SingT "tgt" 
+                              dom = toDelExpr T.! src 
+                              cod = toDelExpr T.! tgt 
+        
+                              cond :: SQLVal ('SQLRow '[ "src" ::: 'SQLAtom, "tgt" ::: 'SQLAtom ] ) -> SQLVal 'SQLBool 
+                              cond = \tup -> T.sql T.And (T.in_ (tup T.! src) dom) (T.in_ (tup T.! tgt) cod)
+        
+                              -- Unsafely recasting the type of `cond' 
+                              cond' :: SQLVal ('SQLRow tbl) -> SQLVal 'SQLBool 
+                              cond' = \(SQLQueryVal x) -> cond (SQLQueryVal x) 
+        
+                          in Delete tbl cond' 
+
+
+    
 
         -- calling expr2SQL function from SQL.hs
         -- returns a QueryExpr (for a select query)  
@@ -108,7 +121,7 @@ eca2SQL fSpec@FSpec{plugInfos=_plugInfos} (ECA (On _insDel _ruleDecl) delta acti
         
         paClause2SQL :: PAclause -> SQLValRef 'SQLBool -> SQLStatement 'SQLUnit
         paClause2SQL (Do insDel' tgtTbl tgtExpr _motive) = \k -> 
-          unsafeMkInsDelAtom fSpec tgtTbl insDel' tgtExpr :>>= \_ -> 
+          unsafeMkInsDelAtom tgtTbl insDel' tgtExpr :>>= \_ -> 
           done k 
 
         paClause2SQL (Nop _motive) = done                                   -- PAClause case of Nop

@@ -29,6 +29,7 @@ import Database.Design.Ampersand.ECA2SQL.Equality
 import Database.Design.Ampersand.ECA2SQL.Singletons
 import Database.Design.Ampersand.Basics.Assertion (Justification(..), impossible) 
 import Control.DeepSeq
+import Control.Monad.State.Class 
 
 -- A newtype whose NFData instance assume that `nf x == rnf x`
 -- for any `x` which is wrapped in the type. 
@@ -404,3 +405,5 @@ instance (Uncurry f args o r, q ~ (f arg -> r)) => Uncurry f (arg ': args) o q w
 freshName :: String -> Int -> String 
 freshName nm count = nm ++ show count
 
+locally :: MonadState a m => (a -> a) -> m x -> m x 
+locally a go = get >>= \s0 -> put (a s0) >> go >>= \x -> put s0 >> return x 
