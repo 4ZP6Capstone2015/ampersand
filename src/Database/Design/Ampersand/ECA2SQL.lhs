@@ -1,3 +1,4 @@
+\ignore{
 \begin{code}
 
 {-# LANGUAGE PatternSynonyms, NoMonomorphismRestriction, OverloadedStrings, LambdaCase, RoleAnnotations, LiberalTypeSynonyms #-} 
@@ -45,41 +46,68 @@ prod2VectorQuery =
       SQLQueryVal  x -> (SubQueryExpr SqSq x:) 
     ) -- This case should probably be made impossible - as it stands, MySQL only supports 
       -- 'scalar' types as function parameters. 
+\end{code}
+}
 
+
+The \lstinline{eca2SQL} function implements the primary algorithm of EFA. 
+This function takes as input an ECA rule and the specification of the information 
+system from which that rule came, and returns a \lstinline{SQLMethod} which takes 
+some (unknown) amount of parameters. 
+
+\begin{code}
 eca2SQL :: FSpec -> ECArule -> (forall (k :: [SQLType]) . SQLMethod k 'SQLBool -> r) -> r
 eca2SQL fSpec@FSpec{plugInfos=_plugInfos} (ECA (On _insDel _ruleDecl) delta action _) q = 
   unsafeDeclToRow fSpec _ruleDecl $ \argsT -> 
-  q $ MkSQLMethod (prod2sing argsT) $ \_args -> 
-    let expr2SQL' = FSpec.expr2SQL' (\case 
-                      d | d == delta -> Just (prod2VectorQuery _args)  
-                      _ -> Nothing
-                      ) fSpec         
+  q $ MkSQLMethod (prod2sing argsT) $ \args -> 
+\end{code}
+The produced AST always begins with a method constructor which gives access to the formal
+parameters of the function, as a Haskell function. These formal parameters are converted
+into a SQL expression, and substituted into relation algebra expressions for the delta
+of the rule. 
+\begin{code}
+    let expr2SQL' = 
+          FSpec.expr2SQL' (\case 
+            d | d == delta -> Just (prod2VectorQuery args)  
+            _ -> Nothing
+            ) fSpec         
 
+\end{code}
+This is a helper function which produces the abstract SQL for a single insertion or deletion.
+This function essentially just looks up the shape of the table to be modified (inserted into
+or deleted from) and computes which fields of that table correspond to the desired relation algebra expression.
+\begin{code}
         unsafeMkInsDelAtom :: Declaration -> InsDel -> Expression -> SQLStatement 'SQLUnit 
         unsafeMkInsDelAtom decl = go (getDeclarationTableInfo fSpec decl)
          where 
+\end{code}
+If the source and the target of the field are the same, we are working with the identity relation.
+We have to rename them first for \lstinline{someTableSpec} to succeed. 
+\begin{code}
           go (plug, srcAtt', tgtAtt') = 
-           let (srcAtt, tgtAtt) = if srcAtt' == tgtAtt' 
-                                    then ( srcAtt' { attName = "Src" ++ attName srcAtt' } 
-                                         , tgtAtt' { attName = "Tgt" ++ attName srcAtt' } 
-                                         )
-                                    else (srcAtt', tgtAtt') 
+           let (srcAtt, tgtAtt) = 
+                 if srcAtt' == tgtAtt' 
+                 then ( srcAtt' { attName = "Src" ++ attName srcAtt' } 
+                      , tgtAtt' { attName = "Tgt" ++ attName srcAtt' } 
+                      )
+                 else (srcAtt', tgtAtt') 
         
-           in 
-              case plug of 
+           in case plug of 
                 ScalarSQL{} -> fatal 0 "ScalarSQL unexecpted here" 
                 _ -> 
                   case someTableSpec (fromString $ sqlname plug) 
                          [ (fromString $ attName srcAtt, Ex (sing :: SQLTypeS 'SQLAtom)) 
                          , (fromString $ attName tgtAtt, Ex (sing :: SQLTypeS 'SQLAtom)) 
                          ] of 
-                    Nothing -> fatal 0 $ unwords 
-                                [ "Could not construct table spec from attributes\n", 
-                                show srcAtt, " and ", show tgtAtt ] 
+                    Nothing -> 
+                      fatal 0 $ unwords 
+                        [ "Could not construct table spec from attributes\n", 
+                        show srcAtt, " and ", show tgtAtt ] 
                     Just (Ex (tbl :: TableSpec tbl)) -> \act toInsDel -> 
                       case act of 
-                        Ins -> withSingT (typeOfTableSpec tbl) $ \(singFromProxy -> SingT (WSQLRow{})) -> 
-                                 Insert tbl (unsafeSQLValFromQuery $ expr2SQL' toInsDel)
+                        Ins -> 
+                          withSingT (typeOfTableSpec tbl) $ \(singFromProxy -> SingT (WSQLRow{})) -> 
+                            Insert tbl (unsafeSQLValFromQuery $ expr2SQL' toInsDel)
                                  
                         Del -> 
                           let toDelExpr :: SQLVal ('SQLRel ('SQLRow '[ "src" ::: 'SQLAtom, "tgt" ::: 'SQLAtom ] ))
