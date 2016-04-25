@@ -1,9 +1,11 @@
+\begin{code}
+
 {-# LANGUAGE PatternSynonyms, NoMonomorphismRestriction, OverloadedStrings, LambdaCase, RoleAnnotations, LiberalTypeSynonyms #-} 
 {-# LANGUAGE ScopedTypeVariables, ViewPatterns #-} 
 {-# OPTIONS -fno-warn-unticked-promoted-constructors #-} 
 
 module Database.Design.Ampersand.ECA2SQL 
-  ( module Database.Design.Ampersand.ECA2SQL
+  ( eca2SQL, eca2PrettySQL
   ) where 
 
 import Database.Design.Ampersand.Core.AbstractSyntaxTree 
@@ -31,12 +33,8 @@ import qualified GHC.TypeLits as TL
 import Database.Design.Ampersand.ECA2SQL.Singletons
 
 
-
-                      
-
-    
-unsafeDeclToTbl :: FSpec -> Declaration -> (forall (xs :: [SQLType]) . Prod SingT xs -> r) -> r 
-unsafeDeclToTbl _fSpec _decl k = k (SingT WSQLAtom :> SingT WSQLAtom :> PNil) 
+unsafeDeclToRow :: FSpec -> Declaration -> (forall (xs :: [SQLType]) . Prod SingT xs -> r) -> r 
+unsafeDeclToRow _fSpec _decl k = k (SingT WSQLAtom :> SingT WSQLAtom :> PNil) 
   -- TODO - maybe not right 
 
 prod2VectorQuery :: Prod (SQLValSem :.: 'SQLRef) xs -> QueryExpr 
@@ -50,7 +48,7 @@ prod2VectorQuery =
 
 eca2SQL :: FSpec -> ECArule -> (forall (k :: [SQLType]) . SQLMethod k 'SQLBool -> r) -> r
 eca2SQL fSpec@FSpec{plugInfos=_plugInfos} (ECA (On _insDel _ruleDecl) delta action _) q = 
-  unsafeDeclToTbl fSpec _ruleDecl $ \argsT -> 
+  unsafeDeclToRow fSpec _ruleDecl $ \argsT -> 
   q $ MkSQLMethod (prod2sing argsT) $ \_args -> 
     let expr2SQL' = FSpec.expr2SQL' (\case 
                       d | d == delta -> Just (prod2VectorQuery _args)  
@@ -70,16 +68,6 @@ eca2SQL fSpec@FSpec{plugInfos=_plugInfos} (ECA (On _insDel _ruleDecl) delta acti
            in 
               case plug of 
                 ScalarSQL{} -> fatal 0 "ScalarSQL unexecpted here" 
-                -- TblSQL{} -> fatal 0 "TblSQL currently unsupported in ECA2SQL" 
-                -- TblSQL{} -> go 
-                --             (BinSQL { sqlname = sqlname plug
-                --                     , cLkpTbl = cLkpTbl plug 
-                --                     , mLkp    = e0 
-                --                     , columns = (c0, c1) 
-                --                     } 
-                --             , c0, c1 ) where ((e0, c0, c1):_) = mLkpTbl plug 
-        
-                -- BinSQL{} -> 
                 _ -> 
                   case someTableSpec (fromString $ sqlname plug) 
                          [ (fromString $ attName srcAtt, Ex (sing :: SQLTypeS 'SQLAtom)) 
@@ -165,3 +153,5 @@ eca2SQL fSpec@FSpec{plugInfos=_plugInfos} (ECA (On _insDel _ruleDecl) delta acti
       NewRef sing (Just "checkDone") (Just T.false) :>>= \checkDone -> 
       paClause2SQL action checkDone :>>= \_ -> 
       SQLRet (deref checkDone)
+
+\end{code} 
