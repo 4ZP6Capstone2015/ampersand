@@ -95,6 +95,10 @@ We have to rename them first for \lstinline{someTableSpec} to succeed.
            in case plug of 
                 ScalarSQL{} -> fatal 0 "ScalarSQL unexecpted here" 
                 _ -> 
+\end{code}
+This should not fail - the input list is clearly non-empty and the source and target 
+names are different.  
+\begin{code}
                   case someTableSpec (fromString $ sqlname plug) 
                          [ (fromString $ attName srcAtt, Ex (sing :: SQLTypeS 'SQLAtom)) 
                          , (fromString $ attName tgtAtt, Ex (sing :: SQLTypeS 'SQLAtom)) 
@@ -104,6 +108,12 @@ We have to rename them first for \lstinline{someTableSpec} to succeed.
                         [ "Could not construct table spec from attributes\n", 
                         show srcAtt, " and ", show tgtAtt ] 
                     Just (Ex (tbl :: TableSpec tbl)) -> \act toInsDel -> 
+\end{code}
+Insertion or deletion can now be performed on the typed table specification. In the case
+of deletion, a SQL delete statement must be given a predicate for selecting rows to be deleted,
+but the \lstinline{PAclause} contains an expression representing the rows to be deleted, so the
+desired predicate must be constructed use the \lstinline{TSQLCombinators} module.
+\begin{code}
                       case act of 
                         Ins -> 
                           withSingT (typeOfTableSpec tbl) $ \(singFromProxy -> SingT (WSQLRow{})) -> 
@@ -117,59 +127,140 @@ We have to rename them first for \lstinline{someTableSpec} to succeed.
                               dom = toDelExpr T.! src 
                               cod = toDelExpr T.! tgt 
         
+\end{code}
+The row is deleted if the source and target are in the domain and codomain, respectively, of the expression to delete.
+\begin{code}
                               cond :: SQLVal ('SQLRow '[ "src" ::: 'SQLAtom, "tgt" ::: 'SQLAtom ] ) -> SQLVal 'SQLBool 
                               cond = \tup -> T.sql T.And (T.in_ (tup T.! src) dom) (T.in_ (tup T.! tgt) cod)
         
-                              -- Unsafely recasting the type of `cond' 
                               cond' :: SQLVal ('SQLRow tbl) -> SQLVal 'SQLBool 
                               cond' = \(SQLQueryVal x) -> cond (SQLQueryVal x) 
         
                           in Delete tbl cond' 
 
-
-    
-
-        -- calling expr2SQL function from SQL.hs
-        -- returns a QueryExpr (for a select query)  
-  
+\end{code}
+Helper functions for use in \lstinline{paClause2SQL} below. If a \lstinline{PAclause}
+has executed successfully, it sets the ``done'' variable to true. If it has not 
+executed successfully, it does nothing. 
+\begin{code}
         done = \r -> SetRef r T.true  
         notDone = const SQLNoop
         
+\end{code}
+The \lstinline{paClause2SQL} function takes the clause to be converted and the 
+variable reference which corresponds to the ``done'' variable for the given
+clause. The output is a statement which produces no value (or the unit value). 
+\begin{code}
         paClause2SQL :: PAclause -> SQLValRef 'SQLBool -> SQLStatement 'SQLUnit
+\end{code}
+A single deletion or insertion is handled by \lstinline{unsafeMkInsDelAtom} above.
+This always succeeds, assuming that the given expression and table are indeed 
+valid. 
+\begin{code}
         paClause2SQL (Do insDel' tgtTbl tgtExpr _motive) = \k -> 
           unsafeMkInsDelAtom tgtTbl insDel' tgtExpr :>>= \_ -> 
           done k 
+\end{code}
+A \lstinline{Nop} and \lstinline{Blk} clause will always succeed or fail, respectively.
+The simplifier which produces the \lstinline{PAclause}s which are the input to this
+function should eliminate occurences of \lstinline{Blk}.
+\begin{code}
+        paClause2SQL (Nop _motive) = done                                  
+        paClause2SQL (Blk _motive) = notDone                               
 
-        paClause2SQL (Nop _motive) = done                                   -- PAClause case of Nop
-        paClause2SQL (Blk _motive) = notDone                                -- PAClause case of Blk
-                                                                            -- tells which expression from whichule has caused the blockage
-                                                                            -- Ideally this case won't be reached in our project
+\end{code}
+The clause \lstinline{CHC ps} indicates that precisely
+one of the clauses \lstinline{ps} should be executed in 
+order for this clause to succeed.   
 
+In order to produce SQL for such a clause, the \lstinline{paClause2SQL}
+function is recursively applied to each subclause, with a fresh 
+variable as the ``done'' variable -- \lstinline{checkDone}
+, whose value is initially false. 
+If any clause succeeds, then the subsequent clauses are not called. 
+After all clauses are executed, the original ``done'' variable -- \lstinline{k} -- 
+is set to true if \lstinline{checkDone} is true. 
 
-        paClause2SQL (CHC ps _motive) = \k ->                               -- PAClause case of CHC; ps is the precisely one clause to be executed
+The result for \lstinline{CHC ps} where \lstinline{ps} ranges from \lstinline{p1} to \lstinline{pN} is a series of nested \texttt{IF} statements:
+\begin{verbatim}
+checkDone := false 
+< paClause2SQL p1 > 
+IF checkDone THEN (SELECT 0) ELSE 
+  < paClause2SQL2 p2 > 
+  IF checkDone THEN (SELECT 0) ELSE 
+    ... 
+      ELSE
+        < paClause2SQL pN >
+k := k OR checkDone 
+\end{verbatim}
+\begin{code}
+        paClause2SQL (CHC ps _motive) = \k ->                               
           NewRef sing (Just "checkDone") (Just T.false) :>>= \checkDone -> 
           let fin = SetRef k (T.sql T.Or (deref checkDone) (deref k)) in
           foldl (\doPs p -> paClause2SQL  p checkDone :>>= \_ -> 
                             IfSQL (deref checkDone) SQLNoop doPs 
                  ) fin ps 
+\end{code}
+The clause \lstinline{ALL ps} indicates that precisely all of the clauses
+\lstinline{ps} should be executed in order for this clause to succeed.
 
-        paClause2SQL (ALL ps _motive) = \k ->                               -- PAClause case of ALL; all PAClauses are executed
+The generated SQL is very similair to the previous case in that it 
+is composed of a series of nested \texttt{IF} statements. Again,
+a fresh ``done'' variable is created; in this case, before the 
+execution of each clause, \lstinline{checkDone} is set to false,
+and the clause must succeed and therefore set it to true. 
+If after any one of the clauses, \lstinline{checkDone} is not
+true, then this clause fails. It does so by setting 
+the value of \lstinline{k} to \lstinline{checkDone} unconditionally
+after the execution of clauses until the first failing one, or until completion.
+
+The resulting code is of the form 
+\begin{verbatim}
+checkDone := false 
+< paClause2SQL p1 > 
+IF checkDone THEN
+  checkDone := false 
+  < paClause2SQL2 p2 > 
+  IF checkDone THEN  
+    ...
+      checkDone := false 
+      < paClause2SQL2 pN > 
+  ELSE (SELECT 0) 
+ELSE (SELECT 0) 
+
+k := checkDone 
+\end{verbatim}
+\begin{code}
+        paClause2SQL (ALL ps _motive) = \k ->                              
           NewRef sing (Just "checkDone") Nothing :>>= \checkDone -> 
-          foldl (\doPs p -> SetRef checkDone T.false :>>= \_ ->            -- sequential execution of all PAClauses
+          foldl (\doPs p -> SetRef checkDone T.false :>>= \_ ->            
                             paClause2SQL p checkDone :>>= \_ -> 
                             IfSQL (deref checkDone) doPs SQLNoop
                 ) (SetRef k (deref checkDone)) ps 
-     
-        -- guarded choice; The rule is maintained if one of the clauses of which the expression is populated is executed.
-        paClause2SQL (GCH ps _motive) = \k ->                                    -- PAClause case of GHC
+\end{code}
+The clause \lstinline{GCH ps} indicates that precisely
+one of the \emph{guarded} clauses \lstinline{ps} should be executed in 
+order for this clause to succeed. A guarded clause is a \lstinline{PAclause}
+with an expression, which may only be executed if the expression 
+is not empty (or the negated version of the predicate, if the 
+expression \emph{is} empty). 
+\begin{code}
+        paClause2SQL (GCH ps _motive) = \k ->                                    
           NewRef sing (Just "checkDone") (Just T.false) :>>= \checkDone ->  
           let fin = SetRef k (T.sql T.Or (deref checkDone) (deref k)) in
           foldl (\doPs (neg, gr, p) -> 
                    let nneg = case neg of { Ins -> id; Del -> T.sql T.Not } 
+\end{code}
+The guard expression can have any type, but it must be a relation. 
+\begin{code}
                        guardExpr = unsafeSQLValFromQuery $ expr2SQL' gr
                        guardExpr :: SQLVal ('SQLRel ('SQLRow '[ "dummy" ::: 'SQLAtom ]))
-                       -- we don't actually know the type of the guard expression, other than it is a relation.
                    in 
+\end{code}
+If the guard expression is non empty (optionally negated by \lstinline{nneg}) 
+then attempt to perform this clause, and if that fails, attempt the other clauses.
+If the guard predicate fails, then attempt the other clauses immediately. 
+\begin{code}
                    IfSQL (nneg $ T.sql T.Exists guardExpr) 
                      (paClause2SQL p checkDone :>>= \_ -> 
                       IfSQL (deref checkDone) SQLNoop doPs
@@ -178,6 +269,10 @@ We have to rename them first for \lstinline{someTableSpec} to succeed.
       
         paClause2SQL x = error $ "paClause2SQL: unsupported operation: " ++ show x 
     in 
+\end{code}
+Create a new reference for \lstinline{paClause2SQL}, call it on the top-level 
+\lstinline{PAclause} and return the value of the reference at the end. 
+\begin{code}
       NewRef sing (Just "checkDone") (Just T.false) :>>= \checkDone -> 
       paClause2SQL action checkDone :>>= \_ -> 
       SQLRet (deref checkDone)
